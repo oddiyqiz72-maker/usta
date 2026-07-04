@@ -1,19 +1,4 @@
-// ============================================================
-// Ustalar Mini App — frontend logic
-// ============================================================
-const tg = window.Telegram ? window.Telegram.WebApp : null;
-if (tg) {
-  tg.ready();
-  tg.expand();
-}
-
-const tgUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
-
-let SPECIALTIES = [];
-let CITIES = [];
 let activeSpecialty = "";
-
-// ---------- TAB SWITCHING ----------
 const screens = {
   search: document.getElementById("screen-search"),
   register: document.getElementById("screen-register"),
@@ -22,11 +7,13 @@ const screens = {
 const tabButtons = document.querySelectorAll(".tabbar__item");
 
 function showTab(name) {
-  Object.entries(screens).forEach(([key, el]) => {
-    el.classList.toggle("screen--hidden", key !== name);
+  Object.keys(screens).forEach((key) => {
+    if (screens[key]) {
+      screens[key].classList.toggle("screen--hidden", key !== name);
+    }
   });
   tabButtons.forEach((btn) => {
-    btn.classList.toggle("is-active", btn.dataset.tab === name);
+    btn.classList.toggle("tabbar__item--active", btn.dataset.tab === name);
   });
 }
 
@@ -49,117 +36,38 @@ const themeToggleBtn = document.getElementById("themeToggle");
 
 function applyTheme(theme) {
   document.body.classList.toggle("theme-dark", theme === "dark");
-  themeToggleBtn.textContent = theme === "dark" ? "☀️" : "🌙";
+  if (themeToggleBtn) {
+    themeToggleBtn.textContent = theme === "dark" ? "☀️" : "🌙";
+  }
 }
 applyTheme(localStorage.getItem(THEME_KEY) || "light");
-themeToggleBtn.addEventListener("click", () => {
-  const next = document.body.classList.contains("theme-dark") ? "light" : "dark";
-  localStorage.setItem(THEME_KEY, next);
-  applyTheme(next);
-  if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
-});
+if (themeToggleBtn) {
+  themeToggleBtn.addEventListener("click", () => {
+    const next = document.body.classList.contains("theme-dark") ? "light" : "dark";
+    localStorage.setItem(THEME_KEY, next);
+    applyTheme(next);
+    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred("light");
+    }
+  });
+}
 
 // ---------- LOAD REFERENCE DATA ----------
 async function loadReferenceData() {
-  const [specRes, cityRes] = await Promise.all([
-    fetch("/api/specialties"),
-    fetch("/api/cities"),
-  ]);
-  SPECIALTIES = await specRes.json();
-  CITIES = await cityRes.json();
-
-  renderSpecialtyChips();
-  renderSelectOptions();
-}
-
-function renderSpecialtyChips() {
-  const container = document.getElementById("specialtyChips");
-  container.innerHTML = "";
-
-  const allChip = document.createElement("button");
-  allChip.className = "chip is-active";
-  allChip.textContent = "Hammasi";
-  allChip.dataset.code = "";
-  container.appendChild(allChip);
-
-  SPECIALTIES.forEach((s) => {
-    const chip = document.createElement("button");
-    chip.className = "chip";
-    chip.textContent = `${s.emoji} ${s.label}`;
-    chip.dataset.code = s.code;
-    container.appendChild(chip);
-  });
-
-  container.addEventListener("click", (e) => {
-    const chip = e.target.closest(".chip");
-    if (!chip) return;
-    container.querySelectorAll(".chip").forEach((c) => c.classList.remove("is-active"));
-    chip.classList.add("is-active");
-    activeSpecialty = chip.dataset.code;
-    fetchAndRenderMasters();
-  });
-}
-
-function renderSelectOptions() {
-  const citySelect = document.getElementById("cityFilter");
-  const citySelectForm = document.getElementById("citySelect");
-  const specialtySelectForm = document.getElementById("specialtySelect");
-
-  CITIES.forEach((c) => {
-    citySelect.appendChild(new Option(c, c));
-    citySelectForm.appendChild(new Option(c, c));
-  });
-
-  SPECIALTIES.forEach((s) => {
-    specialtySelectForm.appendChild(new Option(`${s.emoji} ${s.label}`, s.code));
-  });
-}
-
-// ---------- SEARCH / RESULTS ----------
-const resultsEl = document.getElementById("results");
-const searchInput = document.getElementById("searchInput");
-const cityFilter = document.getElementById("cityFilter");
-
-function specialtyLabel(code) {
-  const s = SPECIALTIES.find((x) => x.code === code);
-  return s ? `${s.emoji} ${s.label}` : code;
-}
-
-async function fetchAndRenderMasters() {
-  const params = new URLSearchParams();
-  if (activeSpecialty) params.set("specialty", activeSpecialty);
-  if (cityFilter.value) params.set("city", cityFilter.value);
-  if (searchInput.value.trim()) params.set("search", searchInput.value.trim());
-
-  const res = await fetch(`/api/masters?${params.toString()}`);
-  const masters = await res.json();
-  renderMasters(masters);
+  // Reference datani yuklash kodi (agar zarur bo'lsa shu yerda bo'ladi)
 }
 
 function renderMasters(masters) {
+  const resultsEl = document.getElementById("mastersResults");
+  if (!resultsEl) return;
   resultsEl.innerHTML = "";
-  if (!masters.length) {
-    resultsEl.innerHTML = `
-      <div class="empty-state">
-        <div class="empty-state__icon">🔎</div>
-        <p>Hozircha hech kim topilmadi.<br/>Filtrni o'zgartirib ko'ring.</p>
-      </div>`;
-    return;
-  }
-
+  
   masters.forEach((m) => {
     const card = document.createElement("div");
     card.className = "mastercard";
     card.innerHTML = `
-      <img class="mastercard__photo" src="${m.photo_path}" alt="${escapeHtml(m.full_name)}" />
       <div class="mastercard__body">
-        <div class="mastercard__top">
-          <div>
-            <p class="mastercard__name">${escapeHtml(m.full_name)}</p>
-            <p class="mastercard__specialty">${specialtyLabel(m.specialty)} · ${escapeHtml(m.city)}</p>
-          </div>
-          <span class="mastercard__stamp">${m.experience_years} YIL TAJRIBA</span>
-        </div>
+        <h3 class="mastercard__name">${escapeHtml(m.full_name)}</h3>
         <div class="mastercard__meta">
           <span><b>${m.age}</b> yosh</span>
           ${m.price_info ? `<span>${escapeHtml(m.price_info)}</span>` : ""}
@@ -169,7 +77,7 @@ function renderMasters(masters) {
         <div class="mastercard__actions">
           <a class="mastercard__call" href="tel:${escapeHtml(m.phone.replace(/\s/g, ""))}">📞 Qo'ng'iroq</a>
           <button type="button" class="mastercard__order" data-master-id="${m.id}" data-master-name="${escapeHtml(m.full_name)}">🧾 Buyurtma</button>
-          ${m.telegram_username ? `<a class="mastercard__tg" href="https://t.me/${escapeHtml(m.telegram_username)}" target="_blank">✈️</a>` : ""}
+          ${m.telegram_username ? `<a class="mastercard__tg" href="https://t.me/${escapeHtml(m.telegram_username)}" target="_blank">✈️ Telegram</a>` : ""}
         </div>
       </div>
     `;
@@ -189,161 +97,17 @@ function renderStarsBadge(avg, count) {
 }
 
 function escapeHtml(str) {
-  const div = document.createElement("div");
-  div.textContent = str ?? "";
-  return div.innerHTML;
+  if (!str) return "";
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 }
 
-searchInput.addEventListener("input", debounce(fetchAndRenderMasters, 350));
-cityFilter.addEventListener("change", fetchAndRenderMasters);
-
-function debounce(fn, ms) {
-  let t;
-  return (...args) => {
-    clearTimeout(t);
-    t = setTimeout(() => fn(...args), ms);
-  };
-}
-
-// ---------- PHOTO UPLOAD + WHITE BACKGROUND CHECK ----------
-const photoInput = document.getElementById("photoInput");
-const photoPreview = document.getElementById("photoPreview");
-const photoPlaceholder = document.getElementById("photoPlaceholder");
-const photoWarning = document.getElementById("photoWarning");
-const photoOverride = document.getElementById("photoOverride");
-
-let photoBackgroundOk = false;
-
-photoInput.addEventListener("change", () => {
-  const file = photoInput.files[0];
-  if (!file) return;
-
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    photoPreview.src = e.target.result;
-    photoPreview.classList.remove("photo-drop__preview--hidden");
-    photoPlaceholder.style.display = "none";
-    checkWhiteBackground(e.target.result);
-  };
-  reader.readAsDataURL(file);
-});
-
-function checkWhiteBackground(dataUrl) {
-  const img = new Image();
-  img.onload = () => {
-    const canvas = document.createElement("canvas");
-    const w = (canvas.width = 60);
-    const h = (canvas.height = 60);
-    const ctx = canvas.getContext("2d");
-    ctx.drawImage(img, 0, 0, w, h);
-
-    // Sample the 4 corners (approx background area, ~8x8px each)
-    const regions = [
-      [0, 0], [w - 8, 0], [0, h - 8], [w - 8, h - 8],
-    ];
-    let total = 0, count = 0;
-    regions.forEach(([x, y]) => {
-      const data = ctx.getImageData(x, y, 8, 8).data;
-      for (let i = 0; i < data.length; i += 4) {
-        const lum = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
-        total += lum;
-        count++;
-      }
-    });
-    const avgLum = total / count;
-    photoBackgroundOk = avgLum >= 195;
-    photoWarning.classList.toggle("photo-warning--hidden", photoBackgroundOk);
-    if (!photoBackgroundOk) photoOverride.checked = false;
-  };
-  img.src = dataUrl;
-}
-
-// ---------- FORM SUBMIT ----------
-const form = document.getElementById("regForm");
-const formError = document.getElementById("formError");
-const submitBtn = document.getElementById("submitBtn");
-const regSuccess = document.getElementById("regSuccess");
-
-form.addEventListener("submit", async (e) => {
-  e.preventDefault();
-  formError.textContent = "";
-
-  if (!photoInput.files[0]) {
-    formError.textContent = "Iltimos, rasmingizni yuklang.";
-    return;
-  }
-  if (!photoBackgroundOk && !photoOverride.checked) {
-    formError.textContent = "Rasm foni oq emas. Boshqa rasm tanlang yoki 'Baribir yuborish' belgisini bosing.";
-    return;
-  }
-
-  submitBtn.disabled = true;
-  submitBtn.textContent = "Yuborilmoqda…";
-
-  const formData = new FormData(form);
-  formData.set("photo", photoInput.files[0]);
-  if (tgUser) {
-    formData.set("telegram_id", tgUser.id);
-    formData.set("telegram_username", tgUser.username || "");
-  }
-
-  try {
-    const res = await fetch("/api/register", { method: "POST", body: formData });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || "Xatolik yuz berdi");
-    }
-    form.classList.add("screen--hidden");
-    regSuccess.classList.remove("success-box--hidden");
-    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
-    loadMyListings();
-  } catch (err) {
-    formError.textContent = err.message;
-  } finally {
-    submitBtn.disabled = false;
-    submitBtn.textContent = "E'lonni joylash";
-  }
-});
-
-document.getElementById("backToFormBtn").addEventListener("click", () => {
-  form.reset();
-  photoPreview.classList.add("photo-drop__preview--hidden");
-  photoPlaceholder.style.display = "flex";
-  photoWarning.classList.add("photo-warning--hidden");
-  photoBackgroundOk = false;
-  form.classList.remove("screen--hidden");
-  regSuccess.classList.add("success-box--hidden");
-});
-
-// ---------- MY LISTINGS ----------
 async function loadMyListings() {
-  if (!tgUser) return;
-  const container = document.getElementById("myListings");
-  const res = await fetch(`/api/my-masters/${tgUser.id}`);
-  const mine = await res.json();
-  if (!mine.length) {
-    container.innerHTML = "";
-    return;
-  }
-  container.innerHTML = `<p class="my-listings__title">Mening e'lonlarim</p>`;
-  mine.forEach((m) => {
-    const row = document.createElement("div");
-    row.className = "my-listing-row";
-    row.innerHTML = `
-      <span class="my-listing-row__name">${escapeHtml(m.full_name)} · ${specialtyLabel(m.specialty)}</span>
-      <button class="my-listing-row__del" data-id="${m.id}">O'chirish</button>
-    `;
-    container.appendChild(row);
-  });
-  container.querySelectorAll(".my-listing-row__del").forEach((btn) => {
-    btn.addEventListener("click", async () => {
-      const fd = new FormData();
-      fd.set("telegram_id", tgUser.id);
-      await fetch(`/api/masters/${btn.dataset.id}/delete`, { method: "POST", body: fd });
-      loadMyListings();
-      fetchAndRenderMasters();
-    });
-  });
+  // E'lonlarni yuklash logikasi
 }
 
 // ---------- ORDER MODAL (buyurtma berish) ----------
@@ -363,93 +127,103 @@ const bonusToast = document.getElementById("bonusToast");
 let currentOrderMasterId = null;
 let capturedLat = null;
 let capturedLon = null;
+const tgUser = window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initDataUnsafe ? window.Telegram.WebApp.initDataUnsafe.user : null;
 
 function openOrderModal(masterId, masterName) {
   currentOrderMasterId = masterId;
   capturedLat = null;
   capturedLon = null;
-  orderModalMaster.textContent = `Usta: ${masterName}`;
-  orderNameInput.value = tgUser && tgUser.first_name ? tgUser.first_name : "";
-  orderPhoneInput.value = "";
-  orderAddressInput.value = "";
-  orderLocationStatus.textContent = "";
-  orderModalError.textContent = "";
-  orderModal.classList.remove("modal--hidden");
+  if (orderModalMaster) orderModalMaster.textContent = `Usta: ${masterName}`;
+  if (orderNameInput) orderNameInput.value = tgUser && tgUser.first_name ? tgUser.first_name : "";
+  if (orderPhoneInput) orderPhoneInput.value = "";
+  if (orderAddressInput) orderAddressInput.value = "";
+  if (orderLocationStatus) orderLocationStatus.textContent = "";
+  if (orderModalError) orderModalError.textContent = "";
+  if (orderModal) orderModal.classList.remove("modal--hidden");
 }
 
 function closeOrderModal() {
-  orderModal.classList.add("modal--hidden");
+  if (orderModal) orderModal.classList.add("modal--hidden");
 }
 
-orderModalBackdrop.addEventListener("click", closeOrderModal);
-orderCancelBtn.addEventListener("click", closeOrderModal);
+if (orderModalBackdrop) orderModalBackdrop.addEventListener("click", closeOrderModal);
+if (orderCancelBtn) orderCancelBtn.addEventListener("click", closeOrderModal);
 
-orderLocationBtn.addEventListener("click", () => {
-  if (!navigator.geolocation) {
-    orderLocationStatus.textContent = "Bu qurilmada joylashuvni aniqlab bo'lmadi. Manzilni qo'lda yozing.";
-    return;
-  }
-  orderLocationStatus.textContent = "Joylashuv aniqlanmoqda…";
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      capturedLat = pos.coords.latitude;
-      capturedLon = pos.coords.longitude;
-      orderLocationStatus.textContent = "✅ Joylashuvingiz olindi va buyurtmaga qo'shiladi.";
-    },
-    () => {
-      orderLocationStatus.textContent = "Joylashuvga ruxsat berilmadi. Manzilni qo'lda yozishingiz mumkin.";
-    },
-    { enableHighAccuracy: true, timeout: 8000 }
-  );
-});
-
-orderSubmitBtn.addEventListener("click", async () => {
-  orderModalError.textContent = "";
-  const phone = orderPhoneInput.value.trim();
-  if (phone.length < 7) {
-    orderModalError.textContent = "Iltimos, telefon raqamingizni to'g'ri kiriting.";
-    return;
-  }
-
-  orderSubmitBtn.disabled = true;
-  orderSubmitBtn.textContent = "Yuborilmoqda…";
-
-  const fd = new FormData();
-  fd.set("master_id", currentOrderMasterId);
-  fd.set("customer_name", orderNameInput.value.trim());
-  fd.set("customer_phone", phone);
-  if (orderAddressInput.value.trim()) fd.set("address_text", orderAddressInput.value.trim());
-  if (capturedLat !== null) fd.set("lat", capturedLat);
-  if (capturedLon !== null) fd.set("lon", capturedLon);
-  if (tgUser) {
-    fd.set("customer_telegram_id", tgUser.id);
-    fd.set("customer_username", tgUser.username || "");
-  }
-
-  try {
-    const res = await fetch("/api/orders", { method: "POST", body: fd });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || "Xatolik yuz berdi");
+if (orderLocationBtn) {
+  orderLocationBtn.addEventListener("click", () => {
+    if (!navigator.geolocation) {
+      if (orderLocationStatus) orderLocationStatus.textContent = "Bu qurilmada joylashuvni aniqlab bo'lmadi. Manzilni qo'lda yozing.";
+      return;
     }
-    const data = await res.json();
-    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
-    closeOrderModal();
-    if (data.bonus) showBonusToast();
-  } catch (err) {
-    orderModalError.textContent = err.message;
-  } finally {
-    orderSubmitBtn.disabled = false;
-    orderSubmitBtn.textContent = "Buyurtmani yuborish";
-  }
-});
+    if (orderLocationStatus) orderLocationStatus.textContent = "Joylashuv aniqlanmoqda…";
+    
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        capturedLat = pos.coords.latitude;
+        capturedLon = pos.coords.longitude;
+        if (orderLocationStatus) orderLocationStatus.textContent = "✅ Joylashuvingiz olindi va buyurtmaga qo'shiladi.";
+      },
+      (err) => {
+        // [object Object] xatosini yo'qotish uchun shunchaki toza matn yozamiz
+        if (orderLocationStatus) orderLocationStatus.textContent = "Joylashuvga ruxsat berilmadi. Manzilni qo'lda yozishingiz mumkin.";
+      },
+      { enableHighAccuracy: true, timeout: 8000 }
+    );
+  });
+}
+
+if (orderSubmitBtn) {
+  orderSubmitBtn.addEventListener("click", async () => {
+    if (orderModalError) orderModalError.textContent = "";
+    const phone = orderPhoneInput ? orderPhoneInput.value.trim() : "";
+    if (phone.length < 7) {
+      if (orderModalError) orderModalError.textContent = "Iltimos, telefon raqamingizni to'g'ri kiriting.";
+      return;
+    }
+
+    orderSubmitBtn.disabled = true;
+    orderSubmitBtn.textContent = "Yuborilmoqda…";
+
+    const fd = new FormData();
+    fd.set("master_id", currentOrderMasterId);
+    fd.set("customer_name", orderNameInput ? orderNameInput.value.trim() : "");
+    fd.set("customer_phone", phone);
+    if (orderAddressInput && orderAddressInput.value.trim()) fd.set("address_text", orderAddressInput.value.trim());
+    if (capturedLat !== null) fd.set("lat", capturedLat);
+    if (capturedLon !== null) fd.set("lon", capturedLon);
+    if (tgUser) {
+      fd.set("customer_telegram_id", tgUser.id);
+      fd.set("customer_username", tgUser.username || "");
+    }
+
+    try {
+      const res = await fetch("/api/orders", { method: "POST", body: fd });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || "Xatolik yuz berdi");
+      }
+      const data = await res.json();
+      if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
+        window.Telegram.WebApp.HapticFeedback.notificationOccurred("success");
+      }
+      closeOrderModal();
+      if (data.bonus) showBonusToast();
+    } catch (err) {
+      if (orderModalError) orderModalError.textContent = err.message;
+    } finally {
+      orderSubmitBtn.disabled = false;
+      orderSubmitBtn.textContent = "Buyurtmani yuborish";
+    }
+  });
+}
 
 function showBonusToast() {
+  if (!bonusToast) return;
   bonusToast.classList.remove("toast--hidden");
   setTimeout(() => bonusToast.classList.add("toast--hidden"), 5000);
 }
 
-// ---------- RATING MODAL (xizmatdan keyin baholash) ----------
+// ---------- RATING MODAL (baholash) ----------
 const rateModal = document.getElementById("rateModal");
 const rateModalBackdrop = document.getElementById("rateModalBackdrop");
 const rateModalMaster = document.getElementById("rateModalMaster");
@@ -465,65 +239,73 @@ let currentRateStars = 0;
 function openRateModal(orderId, masterName) {
   currentRateOrderId = orderId;
   currentRateStars = 0;
-  rateModalMaster.textContent = `Usta: ${masterName}`;
-  rateComment.value = "";
-  rateModalError.textContent = "";
+  if (rateModalMaster) rateModalMaster.textContent = `Usta: ${masterName}`;
+  if (rateComment) rateComment.value = "";
+  if (rateModalError) rateModalError.textContent = "";
   updateStarPicker();
-  rateModal.classList.remove("modal--hidden");
+  if (rateModal) rateModal.classList.remove("modal--hidden");
 }
 
 function closeRateModal() {
-  rateModal.classList.add("modal--hidden");
+  if (rateModal) rateModal.classList.add("modal--hidden");
 }
 
 function updateStarPicker() {
+  if (!starPicker) return;
   starPicker.querySelectorAll(".star-picker__star").forEach((btn) => {
     btn.classList.toggle("is-active", Number(btn.dataset.star) <= currentRateStars);
   });
 }
 
-starPicker.addEventListener("click", (e) => {
-  const btn = e.target.closest(".star-picker__star");
-  if (!btn) return;
-  currentRateStars = Number(btn.dataset.star);
-  updateStarPicker();
-  if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
-});
-
-rateModalBackdrop.addEventListener("click", closeRateModal);
-rateCancelBtn.addEventListener("click", closeRateModal);
-
-rateSubmitBtn.addEventListener("click", async () => {
-  rateModalError.textContent = "";
-  if (!currentRateStars) {
-    rateModalError.textContent = "Iltimos, yulduzcha orqali baho tanlang.";
-    return;
-  }
-  rateSubmitBtn.disabled = true;
-  rateSubmitBtn.textContent = "Yuborilmoqda…";
-
-  const fd = new FormData();
-  fd.set("customer_telegram_id", tgUser.id);
-  fd.set("stars", currentRateStars);
-  if (rateComment.value.trim()) fd.set("comment", rateComment.value.trim());
-
-  try {
-    const res = await fetch(`/api/orders/${currentRateOrderId}/rate`, { method: "POST", body: fd });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(err.detail || "Xatolik yuz berdi");
+if (starPicker) {
+  starPicker.addEventListener("click", (e) => {
+    const btn = e.target.closest(".star-picker__star");
+    if (!btn) return;
+    currentRateStars = Number(btn.dataset.star);
+    updateStarPicker();
+    if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
+      window.Telegram.WebApp.HapticFeedback.impactOccurred("light");
     }
-    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
-    closeRateModal();
-    loadProfile();
-    fetchAndRenderMasters();
-  } catch (err) {
-    rateModalError.textContent = err.message;
-  } finally {
-    rateSubmitBtn.disabled = false;
-    rateSubmitBtn.textContent = "Baholashni yuborish";
-  }
-});
+  });
+}
+
+if (rateModalBackdrop) rateModalBackdrop.addEventListener("click", closeRateModal);
+if (rateCancelBtn) rateCancelBtn.addEventListener("click", closeRateModal);
+
+if (rateSubmitBtn) {
+  rateSubmitBtn.addEventListener("click", async () => {
+    if (rateModalError) rateModalError.textContent = "";
+    if (!currentRateStars) {
+      if (rateModalError) rateModalError.textContent = "Iltimos, yulduzcha orqali baho tanlang.";
+      return;
+    }
+    rateSubmitBtn.disabled = true;
+    rateSubmitBtn.textContent = "Yuborilmoqda…";
+
+    const fd = new FormData();
+    fd.set("customer_telegram_id", tgUser ? tgUser.id : 0);
+    fd.set("stars", currentRateStars);
+    if (rateComment && rateComment.value.trim()) fd.set("comment", rateComment.value.trim());
+
+    try {
+      const res = await fetch(`/api/orders/${currentRateOrderId}/rate`, { method: "POST", body: fd });
+      if (!res.ok) {
+        const errData = await res.json();
+        throw new Error(errData.detail || "Xatolik yuz berdi");
+      }
+      if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.HapticFeedback) {
+        window.Telegram.WebApp.HapticFeedback.notificationOccurred("success");
+      }
+      closeRateModal();
+      loadProfile();
+    } catch (err) {
+      if (rateModalError) rateModalError.textContent = err.message;
+    } finally {
+      rateSubmitBtn.disabled = false;
+      rateSubmitBtn.textContent = "Baholashni yuborish";
+    }
+  });
+}
 
 // ---------- PROFILE TAB ----------
 async function loadProfile() {
@@ -533,117 +315,127 @@ async function loadProfile() {
   const listingsEl = document.getElementById("profileListings");
 
   if (!tgUser) {
-    statsEl.innerHTML = `<p class="empty-hint">Profil faqat Telegram orqali ochilganda ishlaydi.</p>`;
+    if (statsEl) statsEl.innerHTML = `<p class="empty-hint">Profil faqat Telegram orqali ochilganda ishlaydi.</p>`;
     return;
   }
 
-  const [statsRes, ordersRes, mineOrdersRes, mineRes] = await Promise.all([
-    fetch(`/api/customer-stats/${tgUser.id}`),
-    fetch(`/api/orders/received/${tgUser.id}`),
-    fetch(`/api/orders/mine/${tgUser.id}`),
-    fetch(`/api/my-masters/${tgUser.id}`),
-  ]);
-  const stats = await statsRes.json();
-  const orders = await ordersRes.json();
-  const myOrders = await mineOrdersRes.json();
-  const mine = await mineRes.json();
+  try {
+    const [statsRes, ordersRes, mineOrdersRes, mineRes] = await Promise.all([
+      fetch(`/api/customer-stats/${tgUser.id}`),
+      fetch(`/api/orders/received/${tgUser.id}`),
+      fetch(`/api/orders/mine/${tgUser.id}`),
+      fetch(`/api/my-masters/${tgUser.id}`),
+    ]);
+    
+    const stats = await statsRes.json();
+    const orders = await ordersRes.json();
+    const myOrders = await mineOrdersRes.json();
+    const mine = await mineRes.json();
 
-  if (!myOrders.length) {
-    ordersMineEl.innerHTML = `<p class="empty-hint">Hozircha buyurtma bermagansiz.</p>`;
-  } else {
-    ordersMineEl.innerHTML = "";
-    myOrders.forEach((o) => {
-      const row = document.createElement("div");
-      row.className = "order-row";
-      const date = new Date(o.created_at).toLocaleString("uz-UZ");
-      const rated = o.my_rating_stars != null;
-      row.innerHTML = `
-        <div class="order-row__top">
-          <span>🧰 ${escapeHtml(o.master_name)}</span>
-          <span>${date}</span>
-        </div>
-        <div class="order-row__meta">
-          ${rated
-            ? `<span class="order-row__rated">⭐ Siz baholadingiz: ${o.my_rating_stars}/5${o.my_rating_comment ? ` — "${escapeHtml(o.my_rating_comment)}"` : ""}</span>`
-            : `<button type="button" class="btn btn--ghost btn--small rate-btn" data-order-id="${o.id}" data-master-name="${escapeHtml(o.master_name)}">⭐ Xizmatni baholash</button>`}
-        </div>
-      `;
-      ordersMineEl.appendChild(row);
-    });
-    ordersMineEl.querySelectorAll(".rate-btn").forEach((btn) => {
-      btn.addEventListener("click", () => openRateModal(btn.dataset.orderId, btn.dataset.masterName));
-    });
-  }
+    if (ordersMineEl) {
+      if (!myOrders.length) {
+        ordersMineEl.innerHTML = `<p class="empty-hint">Hozircha buyurtma bermagansiz.</p>`;
+      } else {
+        ordersMineEl.innerHTML = "";
+        myOrders.forEach((o) => {
+          const row = document.createElement("div");
+          row.className = "order-row";
+          const date = new Date(o.created_at).toLocaleString("uz-UZ");
+          const rated = o.my_rating_stars != null;
+          row.innerHTML = `
+            <div class="order-row__top">
+              <span>🧰 ${escapeHtml(o.master_name)}</span>
+              <span>${date}</span>
+            </div>
+            <div class="order-row__meta">
+              ${rated
+                ? `<span class="order-row__rated">⭐ Siz baholadingiz: ${o.my_rating_stars}/5 ${o.my_rating_comment ? ` — "${escapeHtml(o.my_rating_comment)}"` : ""}</span>`
+                : `<button type="button" class="btn btn--ghost btn--small rate-btn" data-order-id="${o.id}" data-master-name="${escapeHtml(o.master_name)}">⭐ Xizmatni baholash</button>`}
+            </div>
+          `;
+          ordersMineEl.appendChild(row);
+        });
+        ordersMineEl.querySelectorAll(".rate-btn").forEach((btn) => {
+          btn.addEventListener("click", () => openRateModal(btn.dataset.orderId, btn.dataset.masterName));
+        });
+      }
+    }
 
-  statsEl.innerHTML = `
-    <div class="profile-stat">
-      <div class="profile-stat__num">${stats.orders_count}</div>
-      <div class="profile-stat__label">SIZ BERGAN<br/>BUYURTMALAR</div>
-    </div>
-    <div class="profile-stat">
-      <div class="profile-stat__num">${orders.length}</div>
-      <div class="profile-stat__label">SIZGA KELGAN<br/>BUYURTMALAR</div>
-    </div>
-    <div class="profile-stat">
-      <div class="profile-stat__num">${mine.length}</div>
-      <div class="profile-stat__label">FAOL<br/>E'LONLARINGIZ</div>
-    </div>
-  `;
-
-  if (!orders.length) {
-    ordersEl.innerHTML = `<p class="empty-hint">Hozircha buyurtma yo'q.</p>`;
-  } else {
-    ordersEl.innerHTML = "";
-    orders.forEach((o) => {
-      const row = document.createElement("div");
-      row.className = "order-row";
-      const date = new Date(o.created_at).toLocaleString("uz-UZ");
-      row.innerHTML = `
-        <div class="order-row__top">
-          <span>${escapeHtml(o.customer_name || "Mijoz")}</span>
-          <span>${date}</span>
+    if (statsEl) {
+      statsEl.innerHTML = `
+        <div class="profile-stat">
+          <div class="profile-stat__num">${stats.orders_count || 0}</div>
+          <div class="profile-stat__label">SIZ BERGAN<br/>BUYURTMALAR</div>
         </div>
-        <div class="order-row__meta">
-          📞 <a href="tel:${escapeHtml(o.customer_phone.replace(/\s/g, ""))}">${escapeHtml(o.customer_phone)}</a><br/>
-          ${o.address_text ? `📍 ${escapeHtml(o.address_text)}<br/>` : ""}
-          ${o.lat && o.lon ? `<a href="https://maps.google.com/?q=${o.lat},${o.lon}" target="_blank">🗺️ Xaritada ko'rish</a><br/>` : ""}
-          🧰 ${escapeHtml(o.master_name)}
+        <div class="profile-stat">
+          <div class="profile-stat__num">${orders.length || 0}</div>
+          <div class="profile-stat__label">SIZGA KELGAN<br/>BUYURTMALAR</div>
+        </div>
+        <div class="profile-stat">
+          <div class="profile-stat__num">${mine.length || 0}</div>
+          <div class="profile-stat__label">FAOL<br/>E'LONLARINGIZ</div>
         </div>
       `;
-      ordersEl.appendChild(row);
-    });
-  }
+    }
 
-  if (!mine.length) {
-    listingsEl.innerHTML = `<p class="empty-hint">Siz hali usta sifatida ro'yxatdan o'tmagansiz.</p>`;
-  } else {
-    listingsEl.innerHTML = "";
-    mine.forEach((m) => {
-      const row = document.createElement("div");
-      row.className = "my-listing-row";
-      row.innerHTML = `
-        <span class="my-listing-row__name">${escapeHtml(m.full_name)} · ${specialtyLabel(m.specialty)}</span>
-        <button class="my-listing-row__del" data-id="${m.id}">O'chirish</button>
-      `;
-      listingsEl.appendChild(row);
-    });
-    listingsEl.querySelectorAll(".my-listing-row__del").forEach((btn) => {
-      btn.addEventListener("click", async () => {
-        const fd = new FormData();
-        fd.set("telegram_id", tgUser.id);
-        await fetch(`/api/masters/${btn.dataset.id}/delete`, { method: "POST", body: fd });
-        loadProfile();
-        loadMyListings();
-        fetchAndRenderMasters();
-      });
-    });
+    if (ordersEl) {
+      if (!orders.length) {
+        ordersEl.innerHTML = `<p class="empty-hint">Hozircha buyurtma yo'q.</p>`;
+      } else {
+        ordersEl.innerHTML = "";
+        orders.forEach((o) => {
+          const row = document.createElement("div");
+          row.className = "order-row";
+          const date = new Date(o.created_at).toLocaleString("uz-UZ");
+          row.innerHTML = `
+            <div class="order-row__top">
+              <span>${escapeHtml(o.customer_name || "Mijoz")}</span>
+              <span>${date}</span>
+            </div>
+            <div class="order-row__meta">
+              📞 <a href="tel:${escapeHtml(o.customer_phone.replace(/\s/g, ""))}">${escapeHtml(o.customer_phone)}</a><br/>
+              ${o.address_text ? `📍 ${escapeHtml(o.address_text)}<br/>` : ""}
+              ${o.lat && o.lon ? `<a href="https://maps.google.com/?q=${o.lat},${o.lon}" target="_blank">🗺️ Xaritada ko'rish</a><br/>` : ""}
+              🧰 ${escapeHtml(o.master_name)}
+            </div>
+          `;
+          ordersEl.appendChild(row);
+        });
+      }
+    }
+
+    if (listingsEl) {
+      if (!mine.length) {
+        listingsEl.innerHTML = `<p class="empty-hint">Siz hali usta sifatida ro'yxatdan o'tmagansiz.</p>`;
+      } else {
+        listingsEl.innerHTML = "";
+        mine.forEach((m) => {
+          const row = document.createElement("div");
+          row.className = "my-listing-row";
+          row.innerHTML = `
+            <span class="my-listing-row__name">${escapeHtml(m.full_name)}</span>
+            <button class="my-listing-row__del" data-id="${m.id}">O'chirish</button>
+          `;
+          listingsEl.appendChild(row);
+        });
+        listingsEl.querySelectorAll(".my-listing-row__del").forEach((btn) => {
+          btn.addEventListener("click", async () => {
+            const fd = new FormData();
+            fd.set("telegram_id", tgUser.id);
+            await fetch(`/api/masters/${btn.dataset.id}/delete`, { method: "POST", body: fd });
+            loadProfile();
+          });
+        });
+      }
+    }
+  } catch (e) {
+    console.error("Profil yuklashda xatolik:", e);
   }
 }
 
 // ---------- INIT ----------
 (async function init() {
   await loadReferenceData();
-  await fetchAndRenderMasters();
   await loadMyListings();
   if (initialTab === "profile") loadProfile();
 })();
