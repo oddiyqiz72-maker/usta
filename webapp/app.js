@@ -168,7 +168,7 @@ function renderMasters(masters) {
         ${m.bio ? `<p class="mastercard__bio">${escapeHtml(m.bio)}</p>` : ""}
         <div class="mastercard__actions">
           <a class="mastercard__call" href="tel:${escapeHtml(m.phone.replace(/\s/g, ""))}">📞 Qo'ng'iroq</a>
-          <button type="button" class="mastercard__order" data-master-id="${m.id}" data-master-name="${escapeHtml(m.full_name)}">⭐ Baholash</button>
+          <button type="button" class="mastercard__order" data-master-id="${m.id}" data-master-name="${escapeHtml(m.full_name)}">🔔 Chaqirish</button>
           ${m.telegram_username ? `<a class="mastercard__tg" href="https://t.me/${escapeHtml(m.telegram_username)}" target="_blank">✈️</a>` : ""}
         </div>
       </div>
@@ -177,7 +177,7 @@ function renderMasters(masters) {
   });
 
   resultsEl.querySelectorAll(".mastercard__order").forEach((btn) => {
-    btn.addEventListener("click", () => openRateModal(btn.dataset.masterId, btn.dataset.masterName));
+    btn.addEventListener("click", () => callMaster(btn.dataset.masterId, btn.dataset.masterName, btn));
   });
 }
 
@@ -355,7 +355,48 @@ function extractErrorMessage(errData) {
   return "Xatolik yuz berdi";
 }
 
-// ---------- RATING MODAL (to'g'ridan-to'g'ri usta kartochkasidan baholash) ----------
+// ---------- USTANI CHAQIRISH ----------
+async function callMaster(masterId, masterName, btn) {
+  if (!tgUser) {
+    alert("Chaqirish faqat Telegram ilovasi ichida ishlaydi.");
+    return;
+  }
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.classList.add("btn-pulse");
+  btn.textContent = "Chaqirilmoqda…";
+
+  const autoName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ") || "Mijoz";
+  const fd = new FormData();
+  fd.set("master_id", masterId);
+  fd.set("customer_telegram_id", tgUser.id);
+  fd.set("customer_username", tgUser.username || "");
+  fd.set("customer_name", autoName);
+
+  try {
+    const res = await fetch("/api/calls", { method: "POST", body: fd });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(extractErrorMessage(err));
+    }
+    btn.classList.remove("btn-pulse");
+    btn.classList.add("btn-success-pop");
+    btn.textContent = "✅ Chaqirildi!";
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+    setTimeout(() => {
+      btn.classList.remove("btn-success-pop");
+      btn.textContent = originalText;
+      btn.disabled = false;
+    }, 2500);
+  } catch (err) {
+    btn.classList.remove("btn-pulse");
+    btn.textContent = originalText;
+    btn.disabled = false;
+    alert(err.message);
+  }
+}
+
+// ---------- RATING MODAL (usta "Tugatdim" bosgach, bot orqali taklif qilinadi) ----------
 const rateModal = document.getElementById("rateModal");
 const rateModalBackdrop = document.getElementById("rateModalBackdrop");
 const rateModalMaster = document.getElementById("rateModalMaster");
@@ -437,8 +478,56 @@ rateSubmitBtn.addEventListener("click", async () => {
 // ---------- PROFILE TAB ----------
 async function loadProfile() {
   const listingsEl = document.getElementById("profileListings");
-  if (!tgUser || !listingsEl) return;
+  const callsEl = document.getElementById("profileCalls");
+  if (!tgUser) return;
 
+  if (callsEl) {
+    const callsRes = await fetch(`/api/calls/pending/${tgUser.id}`);
+    const calls = await callsRes.json();
+    if (!calls.length) {
+      callsEl.innerHTML = `<p class="empty-hint">Hozircha kutilayotgan chaqiruv yo'q.</p>`;
+    } else {
+      callsEl.innerHTML = "";
+      calls.forEach((c) => {
+        const row = document.createElement("div");
+        row.className = "call-row";
+        const date = new Date(c.created_at).toLocaleString("uz-UZ");
+        row.innerHTML = `
+          <div class="call-row__top">
+            <span>🔔 ${escapeHtml(c.customer_name || "Mijoz")}</span>
+            <span class="call-row__date">${date}</span>
+          </div>
+          <div class="call-row__meta">
+            ${c.customer_username
+              ? `✈️ <a href="https://t.me/${escapeHtml(c.customer_username)}" target="_blank">@${escapeHtml(c.customer_username)}</a>`
+              : `✈️ Username yo'q — mijoz o'zi yozadi`}
+          </div>
+          <button type="button" class="btn btn--primary btn--small finish-call-btn" data-call-id="${c.id}">✅ Tugatdim</button>
+        `;
+        callsEl.appendChild(row);
+      });
+      callsEl.querySelectorAll(".finish-call-btn").forEach((btn) => {
+        btn.addEventListener("click", async () => {
+          btn.disabled = true;
+          btn.textContent = "Yuborilmoqda…";
+          const fd = new FormData();
+          fd.set("master_telegram_id", tgUser.id);
+          try {
+            await fetch(`/api/calls/${btn.dataset.callId}/finish`, { method: "POST", body: fd });
+            const row = btn.closest(".call-row");
+            row.classList.add("call-row--done");
+            if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+            setTimeout(() => loadProfile(), 600);
+          } catch (e) {
+            btn.disabled = false;
+            btn.textContent = "✅ Tugatdim";
+          }
+        });
+      });
+    }
+  }
+
+  if (!listingsEl) return;
   const res = await fetch(`/api/my-masters/${tgUser.id}`);
   const mine = await res.json();
 
@@ -474,4 +563,17 @@ async function loadProfile() {
   await fetchAndRenderMasters();
   await loadMyListings();
   if (initialTab === "profile") loadProfile();
+
+  // Bot xabaridagi "Ustani baholash" tugmasi orqali ochilganda, to'g'ridan-to'g'ri rate modalni ko'rsatish
+  const rateMasterId = urlParams.get("master_id");
+  if (initialTab === "rate" && rateMasterId) {
+    try {
+      const res = await fetch(`/api/masters`);
+      const all = await res.json();
+      const found = all.find((m) => String(m.id) === String(rateMasterId));
+      openRateModal(rateMasterId, found ? found.full_name : "Usta");
+    } catch (e) {
+      openRateModal(rateMasterId, "Usta");
+    }
+  }
 })();

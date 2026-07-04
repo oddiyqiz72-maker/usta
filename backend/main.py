@@ -2,6 +2,7 @@ import os
 import uuid
 import shutil
 
+import httpx
 from fastapi import FastAPI, Form, File, UploadFile, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -9,6 +10,9 @@ from fastapi.responses import FileResponse
 
 from . import database as db
 from .constants import SPECIALTIES, CITIES
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+WEBAPP_URL = os.getenv("WEBAPP_URL", "")
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 WEBAPP_DIR = os.path.join(BASE_DIR, "webapp")
@@ -116,6 +120,81 @@ async def register_master(
         "photo_path": f"/uploads/{filename}",
     })
     return {"id": new_id, "status": "ok"}
+
+
+async def send_telegram_message(chat_id: int, text: str, web_app_url: str | None = None, button_text: str | None = None):
+    """Bot orqali xabar yuboradi (best-effort, xato bo'lsa jim o'tadi)."""
+    if not BOT_TOKEN:
+        return
+    payload = {"chat_id": chat_id, "text": text, "parse_mode": "HTML"}
+    if web_app_url and button_text:
+        payload["reply_markup"] = {
+            "inline_keyboard": [[{"text": button_text, "web_app": {"url": web_app_url}}]]
+        }
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage", json=payload)
+    except Exception:
+        pass
+
+
+@app.post("/api/calls")
+async def create_call(
+    master_id: int = Form(...),
+    customer_telegram_id: int = Form(...),
+    customer_username: str | None = Form(default=None),
+    customer_name: str | None = Form(default=None),
+):
+    master = db.get_master(master_id)
+    if not master:
+        raise HTTPException(status_code=404, detail="Usta topilmadi")
+
+    call_id = db.create_call({
+        "master_id": master_id,
+        "customer_telegram_id": customer_telegram_id,
+        "customer_username": (customer_username or "").strip() or None,
+        "customer_name": (customer_name or "").strip() or None,
+    })
+
+    if master.get("telegram_id"):
+        display_name = (customer_name or "").strip() or "Mijoz"
+        lines = [
+            "🔔 <b>Sizni mijoz chaqirmoqda!</b>",
+            "",
+            f"👤 {display_name}",
+        ]
+        if customer_username:
+            lines.append(f"✈️ Telegram: @{customer_username} — shu orqali yozing")
+        else:
+            lines.append("✈️ Telegram username yo'q — mijoz sizga o'zi yozishi kerak")
+        lines.append("")
+        lines.append("Ish tugagach, mini-appdagi profilingizda \"✅ Tugatdim\" tugmasini bosing.")
+        await send_telegram_message(master["telegram_id"], "\n".join(lines))
+
+    return {"status": "ok", "call_id": call_id}
+
+
+@app.get("/api/calls/pending/{master_telegram_id}")
+def pending_calls(master_telegram_id: int):
+    return db.list_pending_calls_for_master_telegram(master_telegram_id)
+
+
+@app.post("/api/calls/{call_id}/finish")
+async def finish_call_endpoint(call_id: int, master_telegram_id: int = Form(...)):
+    call = db.finish_call(call_id, master_telegram_id)
+    if not call:
+        raise HTTPException(status_code=403, detail="Ruxsat yo'q yoki chaqiruv topilmadi")
+
+    master = db.get_master(call["master_id"])
+    if master and WEBAPP_URL:
+        rate_url = f"{WEBAPP_URL}?tab=rate&master_id={master['id']}"
+        await send_telegram_message(
+            call["customer_telegram_id"],
+            f"✅ <b>{master['full_name']}</b> xizmatni tugatdi.\nIltimos, ustani baholang — bu boshqalarga yordam beradi!",
+            web_app_url=rate_url,
+            button_text="⭐ Ustani baholash",
+        )
+    return {"status": "ok"}
 
 
 @app.post("/api/masters/{master_id}/rate")

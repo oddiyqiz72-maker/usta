@@ -49,6 +49,18 @@ def init_db():
                 UNIQUE(master_id, customer_telegram_id)
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS calls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                master_id INTEGER NOT NULL,
+                customer_telegram_id INTEGER NOT NULL,
+                customer_username TEXT,
+                customer_name TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                created_at TEXT NOT NULL,
+                finished_at TEXT
+            )
+        """)
         conn.commit()
         conn.close()
 
@@ -150,6 +162,71 @@ def masters_by_telegram_id(telegram_id: int):
         ).fetchall()
         conn.close()
         return [_attach_rating_defaults(dict(r)) for r in rows]
+
+
+# ---------- CHAQIRUVLAR (CALLS) ----------
+
+def create_call(data: dict) -> int:
+    with _lock:
+        conn = get_connection()
+        cur = conn.execute("""
+            INSERT INTO calls (master_id, customer_telegram_id, customer_username, customer_name, status, created_at)
+            VALUES (?, ?, ?, ?, 'pending', ?)
+        """, (
+            data["master_id"],
+            data["customer_telegram_id"],
+            data.get("customer_username"),
+            data.get("customer_name"),
+            datetime.now(timezone.utc).isoformat(),
+        ))
+        conn.commit()
+        new_id = cur.lastrowid
+        conn.close()
+        return new_id
+
+
+def get_call(call_id: int):
+    with _lock:
+        conn = get_connection()
+        row = conn.execute("SELECT * FROM calls WHERE id = ?", (call_id,)).fetchone()
+        conn.close()
+        return dict(row) if row else None
+
+
+def list_pending_calls_for_master_telegram(telegram_id: int):
+    """Shu ustaga (telegram_id orqali) kelgan, hali tugatilmagan chaqiruvlar."""
+    with _lock:
+        conn = get_connection()
+        rows = conn.execute("""
+            SELECT c.*, m.full_name AS master_name
+            FROM calls c
+            JOIN masters m ON c.master_id = m.id
+            WHERE m.telegram_id = ? AND c.status = 'pending'
+            ORDER BY c.created_at DESC
+        """, (telegram_id,)).fetchall()
+        conn.close()
+        return [dict(r) for r in rows]
+
+
+def finish_call(call_id: int, master_telegram_id: int):
+    """Faqat shu ustaning o'zi chaqiruvni tugatilgan deb belgilashi mumkin."""
+    with _lock:
+        conn = get_connection()
+        row = conn.execute("""
+            SELECT c.* FROM calls c
+            JOIN masters m ON c.master_id = m.id
+            WHERE c.id = ? AND m.telegram_id = ?
+        """, (call_id, master_telegram_id)).fetchone()
+        if not row:
+            conn.close()
+            return None
+        conn.execute(
+            "UPDATE calls SET status = 'finished', finished_at = ? WHERE id = ?",
+            (datetime.now(timezone.utc).isoformat(), call_id)
+        )
+        conn.commit()
+        conn.close()
+        return dict(row)
 
 
 # ---------- BAHOLASH (RATINGS) ----------

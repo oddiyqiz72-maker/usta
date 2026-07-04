@@ -555,3 +555,55 @@ body{
   padding:0;
 }
 .star-picker__star.is-active{ color:#f5b400; transform: scale(1.12); }
+
+/* ============================================================
+   CHAQIRUVLAR (CALLS) — profildagi kutilayotgan chaqiruvlar
+   ============================================================ */
+.calls-list{ display:flex; flex-direction:column; gap:10px; }
+.call-row{
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 12px 14px;
+  animation: callRowIn .35s ease both;
+  transition: opacity .4s ease, transform .4s ease;
+}
+.call-row--done{
+  opacity: 0;
+  transform: scale(0.94) translateY(-4px);
+}
+.call-row__top{
+  display:flex; justify-content:space-between; align-items:center;
+  font-weight:600; font-size:14px; margin-bottom:4px;
+}
+.call-row__date{ font-size:11.5px; color: var(--muted); font-weight:500; }
+.call-row__meta{ font-size:13px; color: var(--ink); margin-bottom:8px; }
+.call-row__meta a{ color: var(--accent-2); font-weight:600; }
+
+@keyframes callRowIn{
+  from{ opacity:0; transform: translateY(8px); }
+  to{ opacity:1; transform: translateY(0); }
+}
+
+/* ============================================================
+   TUGMA ANIMATSIYALARI — chaqirish jarayoni
+   ============================================================ */
+.btn-pulse{
+  animation: btnPulse 0.9s ease-in-out infinite;
+}
+@keyframes btnPulse{
+  0%, 100%{ box-shadow: 0 0 0 0 rgba(255,106,61,0.45); }
+  50%{ box-shadow: 0 0 0 8px rgba(255,106,61,0); }
+}
+
+.btn-success-pop{
+  background: var(--success) !important;
+  color:#fff !important;
+  border-color: var(--success) !important;
+  animation: btnSuccessPop .4s cubic-bezier(.34,1.56,.64,1);
+}
+@keyframes btnSuccessPop{
+  0%{ transform: scale(1); }
+  40%{ transform: scale(1.12); }
+  100%{ transform: scale(1); }
+}
