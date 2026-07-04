@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Ustalar — mahalliy ustalarni topish</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css" />
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+
+<div class="app">
+
+  <!-- HEADER -->
+  <header class="topbar">
+    <div class="topbar__badge">🧰</div>
+    <div class="topbar__title">
+      <span class="topbar__eyebrow">MAHALLIY</span>
+      <h1>USTALAR</h1>
+    </div>
+  </header>
+
+  <!-- TABS CONTENT -->
+  <main class="screen" id="screen-search">
+    <section class="panel">
+      <div class="search-row">
+        <input id="searchInput" class="input input--search" type="text" placeholder="Ism bo'yicha qidirish…" />
+      </div>
+
+      <div class="chips" id="specialtyChips"></div>
+
+      <select id="cityFilter" class="input input--select">
+        <option value="">Barcha hududlar</option>
+      </select>
+
+      <div class="results" id="results">
+        <div class="empty-state" id="emptyState">
+          <div class="empty-state__icon">🔎</div>
+          <p>Hozircha hech kim topilmadi.<br/>Filtrni o'zgartirib ko'ring.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <main class="screen screen--hidden" id="screen-register">
+    <section class="panel">
+
+      <div id="regSuccess" class="success-box success-box--hidden">
+        <div class="success-box__icon">✅</div>
+        <h3>E'lon joylandi!</h3>
+        <p>Sizning profilingiz endi qidiruvda ko'rinadi.</p>
+        <button class="btn btn--ghost" id="backToFormBtn">Yana usta qo'shish</button>
+      </div>
+
+      <form id="regForm" class="form">
+        <h2 class="form__title">Usta sifatida ro'yxatdan o'tish</h2>
+        <p class="form__hint">Ma'lumotlaringiz mijozlarga ko'rinadi. Barcha maydonlarni to'g'ri to'ldiring.</p>
+
+        <label class="field">
+          <span class="field__label">To'liq ism</span>
+          <input required name="full_name" class="input" type="text" placeholder="Masalan: Aliyev Vali" maxlength="60" />
+        </label>
+
+        <div class="field-row">
+          <label class="field">
+            <span class="field__label">Yoshi</span>
+            <input required name="age" class="input" type="number" min="16" max="90" placeholder="32" />
+          </label>
+          <label class="field">
+            <span class="field__label">Tajribasi (yil)</span>
+            <input required name="experience_years" class="input" type="number" min="0" max="70" placeholder="7" />
+          </label>
+        </div>
+
+        <label class="field">
+          <span class="field__label">Soha</span>
+          <select required name="specialty" class="input input--select" id="specialtySelect"></select>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Hudud</span>
+          <select required name="city" class="input input--select" id="citySelect"></select>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Telefon raqami</span>
+          <input required name="phone" class="input" type="tel" placeholder="+998 90 123 45 67" />
+        </label>
+
+        <label class="field">
+          <span class="field__label">Narx (ixtiyoriy)</span>
+          <input name="price_info" class="input" type="text" placeholder="Masalan: kelishilgan holda / 100 000 so'mdan" maxlength="60" />
+        </label>
+
+        <label class="field">
+          <span class="field__label">Qisqa ma'lumot (ixtiyoriy)</span>
+          <textarea name="bio" class="input input--textarea" maxlength="200" placeholder="Masalan: 10 yildan beri kvartira remonti bilan shug'ullanaman."></textarea>
+        </label>
+
+        <label class="field">
+          <span class="field__label">Rasmingiz <em>(oq/och fonda, aniq ko'rinadigan)</em></span>
+          <div class="photo-drop" id="photoDrop">
+            <img id="photoPreview" class="photo-drop__preview photo-drop__preview--hidden" />
+            <div class="photo-drop__placeholder" id="photoPlaceholder">
+              <span class="photo-drop__icon">📷</span>
+              <span>Rasm yuklash uchun bosing</span>
+            </div>
+            <input required id="photoInput" name="photo" type="file" accept="image/*" class="photo-drop__input" />
+          </div>
+          <div class="photo-warning photo-warning--hidden" id="photoWarning">
+            ⚠️ Rasm foni oq/och rangda emasga o'xshaydi. Iltimos, tekis oq fonda tushirilgan rasm yuklang — bu mijozlar ishonchini oshiradi.
+            <label class="photo-warning__override">
+              <input type="checkbox" id="photoOverride" />
+              Baribir shu rasmni yuborish
+            </label>
+          </div>
+        </label>
+
+        <div class="form__error" id="formError"></div>
+
+        <button type="submit" class="btn btn--primary" id="submitBtn">E'lonni joylash</button>
+      </form>
+
+      <div class="my-listings" id="myListings"></div>
+    </section>
+  </main>
+
+  <!-- BOTTOM NAV -->
+  <nav class="tabbar">
+    <button class="tabbar__item is-active" data-tab="search">
+      <span class="tabbar__icon">🔍</span>
+      <span>Qidirish</span>
+    </button>
+    <button class="tabbar__item" data-tab="register">
+      <span class="tabbar__icon">🧰</span>
+      <span>Usta bo'lish</span>
+    </button>
+  </nav>
+
+</div>
+
+<script src="/app.js"></script>
+</body>
+</html>
