@@ -24,7 +24,6 @@ tabButtons.forEach((btn) => {
   });
 });
 
-// Open tab based on ?tab= param sent from the bot's WebApp buttons
 const urlParams = new URLSearchParams(window.location.search);
 const initialTab = urlParams.get("tab");
 if (initialTab === "register") showTab("register");
@@ -52,10 +51,7 @@ if (themeToggleBtn) {
   });
 }
 
-// ---------- LOAD REFERENCE DATA ----------
-async function loadReferenceData() {
-  // Reference datani yuklash kodi (agar zarur bo'lsa shu yerda bo'ladi)
-}
+async function loadReferenceData() {}
 
 function renderMasters(masters) {
   const resultsEl = document.getElementById("mastersResults");
@@ -106,9 +102,7 @@ function escapeHtml(str) {
     .replace(/'/g, "&#039;");
 }
 
-async function loadMyListings() {
-  // E'lonlarni yuklash logikasi
-}
+async function loadMyListings() {}
 
 // ---------- ORDER MODAL (buyurtma berish) ----------
 const orderModal = document.getElementById("orderModal");
@@ -163,8 +157,8 @@ if (orderLocationBtn) {
         capturedLon = pos.coords.longitude;
         if (orderLocationStatus) orderLocationStatus.textContent = "✅ Joylashuvingiz olindi va buyurtmaga qo'shiladi.";
       },
-      (err) => {
-        // [object Object] xatosini yo'qotish uchun shunchaki toza matn yozamiz
+      () => {
+        // Har qanday xatolikda faqat toza matn chiqadi, hech qanday ob'ekt qo'shilmaydi
         if (orderLocationStatus) orderLocationStatus.textContent = "Joylashuvga ruxsat berilmadi. Manzilni qo'lda yozishingiz mumkin.";
       },
       { enableHighAccuracy: true, timeout: 8000 }
@@ -435,7 +429,5 @@ async function loadProfile() {
 
 // ---------- INIT ----------
 (async function init() {
-  await loadReferenceData();
-  await loadMyListings();
   if (initialTab === "profile") loadProfile();
 })();
