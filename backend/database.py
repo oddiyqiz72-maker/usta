@@ -39,35 +39,14 @@ def init_db():
             )
         """)
         conn.execute("""
-            CREATE TABLE IF NOT EXISTS orders (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                master_id INTEGER NOT NULL,
-                customer_telegram_id INTEGER,
-                customer_username TEXT,
-                customer_name TEXT,
-                customer_phone TEXT,
-                lat REAL,
-                lon REAL,
-                address_text TEXT,
-                created_at TEXT NOT NULL,
-                status TEXT DEFAULT 'new'
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS customer_stats (
-                telegram_id INTEGER PRIMARY KEY,
-                orders_count INTEGER DEFAULT 0
-            )
-        """)
-        conn.execute("""
             CREATE TABLE IF NOT EXISTS ratings (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                order_id INTEGER NOT NULL UNIQUE,
                 master_id INTEGER NOT NULL,
-                customer_telegram_id INTEGER,
+                customer_telegram_id INTEGER NOT NULL,
                 stars INTEGER NOT NULL,
                 comment TEXT,
-                created_at TEXT NOT NULL
+                created_at TEXT NOT NULL,
+                UNIQUE(master_id, customer_telegram_id)
             )
         """)
         conn.commit()
@@ -173,115 +152,24 @@ def masters_by_telegram_id(telegram_id: int):
         return [_attach_rating_defaults(dict(r)) for r in rows]
 
 
-# ---------- BUYURTMALAR (ORDERS) ----------
-
-def create_order(data: dict) -> int:
-    with _lock:
-        conn = get_connection()
-        cur = conn.execute("""
-            INSERT INTO orders
-            (master_id, customer_telegram_id, customer_username, customer_name,
-             customer_phone, address_text, created_at, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'new')
-        """, (
-            data["master_id"],
-            data.get("customer_telegram_id"),
-            data.get("customer_username"),
-            data.get("customer_name"),
-            data.get("customer_phone"),
-            data.get("address_text"),
-            datetime.now(timezone.utc).isoformat(),
-        ))
-        conn.commit()
-        new_id = cur.lastrowid
-        conn.close()
-        return new_id
-
-
-def get_order(order_id: int):
-    with _lock:
-        conn = get_connection()
-        row = conn.execute("SELECT * FROM orders WHERE id = ?", (order_id,)).fetchone()
-        conn.close()
-        return dict(row) if row else None
-
-
-def list_orders_for_master_telegram(telegram_id: int):
-    """Shu telegram_id'ga tegishli barcha usta e'lonlariga kelgan buyurtmalar."""
-    with _lock:
-        conn = get_connection()
-        rows = conn.execute("""
-            SELECT o.*, m.full_name AS master_name, m.specialty AS master_specialty
-            FROM orders o
-            JOIN masters m ON o.master_id = m.id
-            WHERE m.telegram_id = ?
-            ORDER BY o.created_at DESC
-        """, (telegram_id,)).fetchall()
-        conn.close()
-        return [dict(r) for r in rows]
-
-
-# ---------- MIJOZ STATISTIKASI (LOYALTY) ----------
-
-def increment_customer_orders(telegram_id: int):
-    """Mijoz necha marta buyurtma berganini +1 qilib, yangi sonni qaytaradi."""
-    with _lock:
-        conn = get_connection()
-        conn.execute("""
-            INSERT INTO customer_stats (telegram_id, orders_count) VALUES (?, 1)
-            ON CONFLICT(telegram_id) DO UPDATE SET orders_count = orders_count + 1
-        """, (telegram_id,))
-        conn.commit()
-        row = conn.execute(
-            "SELECT orders_count FROM customer_stats WHERE telegram_id = ?", (telegram_id,)
-        ).fetchone()
-        conn.close()
-        return row["orders_count"] if row else None
-
-
-def get_customer_orders(telegram_id: int) -> int:
-    with _lock:
-        conn = get_connection()
-        row = conn.execute(
-            "SELECT orders_count FROM customer_stats WHERE telegram_id = ?", (telegram_id,)
-        ).fetchone()
-        conn.close()
-        return row["orders_count"] if row else 0
-
-
-def list_orders_by_customer(telegram_id: int):
-    """Shu mijoz bergan barcha buyurtmalar, allaqachon baholanganini ko'rsatgan holda."""
-    with _lock:
-        conn = get_connection()
-        rows = conn.execute("""
-            SELECT o.*, m.full_name AS master_name, m.specialty AS master_specialty,
-                   rt.stars AS my_rating_stars, rt.comment AS my_rating_comment
-            FROM orders o
-            JOIN masters m ON o.master_id = m.id
-            LEFT JOIN ratings rt ON rt.order_id = o.id
-            WHERE o.customer_telegram_id = ?
-            ORDER BY o.created_at DESC
-        """, (telegram_id,)).fetchall()
-        conn.close()
-        return [dict(r) for r in rows]
-
-
 # ---------- BAHOLASH (RATINGS) ----------
 
-def add_rating(order_id: int, master_id: int, customer_telegram_id: int, stars: int, comment: str = None):
+def add_rating(master_id: int, customer_telegram_id: int, stars: int, comment: str = None):
+    """Bitta mijoz bitta ustani faqat bir marta baholay oladi."""
     with _lock:
         conn = get_connection()
         existing = conn.execute(
-            "SELECT id FROM ratings WHERE order_id = ?", (order_id,)
+            "SELECT id FROM ratings WHERE master_id = ? AND customer_telegram_id = ?",
+            (master_id, customer_telegram_id)
         ).fetchone()
         if existing:
             conn.close()
-            return None  # allaqachon baholangan
+            return None  # allaqachon baholagan
         cur = conn.execute("""
-            INSERT INTO ratings (order_id, master_id, customer_telegram_id, stars, comment, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO ratings (master_id, customer_telegram_id, stars, comment, created_at)
+            VALUES (?, ?, ?, ?, ?)
         """, (
-            order_id, master_id, customer_telegram_id, stars, comment,
+            master_id, customer_telegram_id, stars, comment,
             datetime.now(timezone.utc).isoformat(),
         ))
         conn.commit()

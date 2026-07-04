@@ -168,7 +168,7 @@ function renderMasters(masters) {
         ${m.bio ? `<p class="mastercard__bio">${escapeHtml(m.bio)}</p>` : ""}
         <div class="mastercard__actions">
           <a class="mastercard__call" href="tel:${escapeHtml(m.phone.replace(/\s/g, ""))}">📞 Qo'ng'iroq</a>
-          <button type="button" class="mastercard__order" data-master-id="${m.id}" data-master-name="${escapeHtml(m.full_name)}">🧾 Buyurtma</button>
+          <button type="button" class="mastercard__order" data-master-id="${m.id}" data-master-name="${escapeHtml(m.full_name)}">⭐ Baholash</button>
           ${m.telegram_username ? `<a class="mastercard__tg" href="https://t.me/${escapeHtml(m.telegram_username)}" target="_blank">✈️</a>` : ""}
         </div>
       </div>
@@ -177,7 +177,7 @@ function renderMasters(masters) {
   });
 
   resultsEl.querySelectorAll(".mastercard__order").forEach((btn) => {
-    btn.addEventListener("click", () => openOrderModal(btn.dataset.masterId, btn.dataset.masterName));
+    btn.addEventListener("click", () => openRateModal(btn.dataset.masterId, btn.dataset.masterName));
   });
 }
 
@@ -346,71 +346,6 @@ async function loadMyListings() {
   });
 }
 
-// ---------- ORDER MODAL (buyurtma berish) ----------
-const orderModal = document.getElementById("orderModal");
-const orderModalBackdrop = document.getElementById("orderModalBackdrop");
-const orderModalMaster = document.getElementById("orderModalMaster");
-const orderAddressInput = document.getElementById("orderAddress");
-const orderModalError = document.getElementById("orderModalError");
-const orderSubmitBtn = document.getElementById("orderSubmitBtn");
-const orderCancelBtn = document.getElementById("orderCancelBtn");
-const bonusToast = document.getElementById("bonusToast");
-
-let currentOrderMasterId = null;
-
-function openOrderModal(masterId, masterName) {
-  currentOrderMasterId = masterId;
-  orderModalMaster.textContent = `Usta: ${masterName}`;
-  orderAddressInput.value = "";
-  orderModalError.textContent = "";
-  orderModal.classList.remove("modal--hidden");
-}
-
-function closeOrderModal() {
-  orderModal.classList.add("modal--hidden");
-}
-
-orderModalBackdrop.addEventListener("click", closeOrderModal);
-orderCancelBtn.addEventListener("click", closeOrderModal);
-
-orderSubmitBtn.addEventListener("click", async () => {
-  orderModalError.textContent = "";
-
-  if (!tgUser) {
-    orderModalError.textContent = "Buyurtma berish faqat Telegram ilovasi ichida ishlaydi.";
-    return;
-  }
-
-  orderSubmitBtn.disabled = true;
-  orderSubmitBtn.textContent = "Yuborilmoqda…";
-
-  const autoName = [tgUser.first_name, tgUser.last_name].filter(Boolean).join(" ") || "Mijoz";
-
-  const fd = new FormData();
-  fd.set("master_id", currentOrderMasterId);
-  fd.set("customer_telegram_id", tgUser.id);
-  fd.set("customer_username", tgUser.username || "");
-  fd.set("customer_name", autoName);
-  if (orderAddressInput.value.trim()) fd.set("address_text", orderAddressInput.value.trim());
-
-  try {
-    const res = await fetch("/api/orders", { method: "POST", body: fd });
-    if (!res.ok) {
-      const err = await res.json();
-      throw new Error(extractErrorMessage(err));
-    }
-    const data = await res.json();
-    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
-    closeOrderModal();
-    if (data.bonus) showBonusToast();
-  } catch (err) {
-    orderModalError.textContent = err.message;
-  } finally {
-    orderSubmitBtn.disabled = false;
-    orderSubmitBtn.textContent = "Buyurtmani yuborish";
-  }
-});
-
 function extractErrorMessage(errData) {
   const d = errData && errData.detail;
   if (!d) return "Xatolik yuz berdi";
@@ -420,12 +355,7 @@ function extractErrorMessage(errData) {
   return "Xatolik yuz berdi";
 }
 
-function showBonusToast() {
-  bonusToast.classList.remove("toast--hidden");
-  setTimeout(() => bonusToast.classList.add("toast--hidden"), 5000);
-}
-
-// ---------- RATING MODAL (xizmatdan keyin baholash) ----------
+// ---------- RATING MODAL (to'g'ridan-to'g'ri usta kartochkasidan baholash) ----------
 const rateModal = document.getElementById("rateModal");
 const rateModalBackdrop = document.getElementById("rateModalBackdrop");
 const rateModalMaster = document.getElementById("rateModalMaster");
@@ -435,11 +365,15 @@ const rateModalError = document.getElementById("rateModalError");
 const rateSubmitBtn = document.getElementById("rateSubmitBtn");
 const rateCancelBtn = document.getElementById("rateCancelBtn");
 
-let currentRateOrderId = null;
+let currentRateMasterId = null;
 let currentRateStars = 0;
 
-function openRateModal(orderId, masterName) {
-  currentRateOrderId = orderId;
+function openRateModal(masterId, masterName) {
+  if (!tgUser) {
+    alert("Baholash faqat Telegram ilovasi ichida ishlaydi.");
+    return;
+  }
+  currentRateMasterId = masterId;
   currentRateStars = 0;
   rateModalMaster.textContent = `Usta: ${masterName}`;
   rateComment.value = "";
@@ -484,14 +418,13 @@ rateSubmitBtn.addEventListener("click", async () => {
   if (rateComment.value.trim()) fd.set("comment", rateComment.value.trim());
 
   try {
-    const res = await fetch(`/api/orders/${currentRateOrderId}/rate`, { method: "POST", body: fd });
+    const res = await fetch(`/api/masters/${currentRateMasterId}/rate`, { method: "POST", body: fd });
     if (!res.ok) {
       const err = await res.json();
       throw new Error(extractErrorMessage(err));
     }
     if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
     closeRateModal();
-    loadProfile();
     fetchAndRenderMasters();
   } catch (err) {
     rateModalError.textContent = err.message;
@@ -503,93 +436,11 @@ rateSubmitBtn.addEventListener("click", async () => {
 
 // ---------- PROFILE TAB ----------
 async function loadProfile() {
-  const statsEl = document.getElementById("profileStats");
-  const ordersMineEl = document.getElementById("ordersMine");
-  const ordersEl = document.getElementById("ordersReceived");
   const listingsEl = document.getElementById("profileListings");
+  if (!tgUser || !listingsEl) return;
 
-  if (!tgUser) {
-    statsEl.innerHTML = `<p class="empty-hint">Profil faqat Telegram orqali ochilganda ishlaydi.</p>`;
-    return;
-  }
-
-  const [statsRes, ordersRes, mineOrdersRes, mineRes] = await Promise.all([
-    fetch(`/api/customer-stats/${tgUser.id}`),
-    fetch(`/api/orders/received/${tgUser.id}`),
-    fetch(`/api/orders/mine/${tgUser.id}`),
-    fetch(`/api/my-masters/${tgUser.id}`),
-  ]);
-  const stats = await statsRes.json();
-  const orders = await ordersRes.json();
-  const myOrders = await mineOrdersRes.json();
-  const mine = await mineRes.json();
-
-  if (!myOrders.length) {
-    ordersMineEl.innerHTML = `<p class="empty-hint">Hozircha buyurtma bermagansiz.</p>`;
-  } else {
-    ordersMineEl.innerHTML = "";
-    myOrders.forEach((o) => {
-      const row = document.createElement("div");
-      row.className = "order-row";
-      const date = new Date(o.created_at).toLocaleString("uz-UZ");
-      const rated = o.my_rating_stars != null;
-      row.innerHTML = `
-        <div class="order-row__top">
-          <span>🧰 ${escapeHtml(o.master_name)}</span>
-          <span>${date}</span>
-        </div>
-        <div class="order-row__meta">
-          ${rated
-            ? `<span class="order-row__rated">⭐ Siz baholadingiz: ${o.my_rating_stars}/5${o.my_rating_comment ? ` — "${escapeHtml(o.my_rating_comment)}"` : ""}</span>`
-            : `<button type="button" class="btn btn--ghost btn--small rate-btn" data-order-id="${o.id}" data-master-name="${escapeHtml(o.master_name)}">⭐ Xizmatni baholash</button>`}
-        </div>
-      `;
-      ordersMineEl.appendChild(row);
-    });
-    ordersMineEl.querySelectorAll(".rate-btn").forEach((btn) => {
-      btn.addEventListener("click", () => openRateModal(btn.dataset.orderId, btn.dataset.masterName));
-    });
-  }
-
-  statsEl.innerHTML = `
-    <div class="profile-stat">
-      <div class="profile-stat__num">${stats.orders_count}</div>
-      <div class="profile-stat__label">SIZ BERGAN<br/>BUYURTMALAR</div>
-    </div>
-    <div class="profile-stat">
-      <div class="profile-stat__num">${orders.length}</div>
-      <div class="profile-stat__label">SIZGA KELGAN<br/>BUYURTMALAR</div>
-    </div>
-    <div class="profile-stat">
-      <div class="profile-stat__num">${mine.length}</div>
-      <div class="profile-stat__label">FAOL<br/>E'LONLARINGIZ</div>
-    </div>
-  `;
-
-  if (!orders.length) {
-    ordersEl.innerHTML = `<p class="empty-hint">Hozircha buyurtma yo'q.</p>`;
-  } else {
-    ordersEl.innerHTML = "";
-    orders.forEach((o) => {
-      const row = document.createElement("div");
-      row.className = "order-row";
-      const date = new Date(o.created_at).toLocaleString("uz-UZ");
-      row.innerHTML = `
-        <div class="order-row__top">
-          <span>${escapeHtml(o.customer_name || "Mijoz")}</span>
-          <span>${date}</span>
-        </div>
-        <div class="order-row__meta">
-          ${o.customer_username
-            ? `✈️ <a href="https://t.me/${escapeHtml(o.customer_username)}" target="_blank">@${escapeHtml(o.customer_username)}</a> orqali yozing<br/>`
-            : `✈️ Telegram username yo'q — mijoz sizga o'zi yozishi kerak<br/>`}
-          ${o.address_text ? `📍 ${escapeHtml(o.address_text)}<br/>` : ""}
-          🧰 ${escapeHtml(o.master_name)}
-        </div>
-      `;
-      ordersEl.appendChild(row);
-    });
-  }
+  const res = await fetch(`/api/my-masters/${tgUser.id}`);
+  const mine = await res.json();
 
   if (!mine.length) {
     listingsEl.innerHTML = `<p class="empty-hint">Siz hali usta sifatida ro'yxatdan o'tmagansiz.</p>`;
