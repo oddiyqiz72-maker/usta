@@ -128,13 +128,14 @@ async def notify_master_about_order(master: dict, order: dict):
     lines = [
         "🧾 <b>Sizga yangi buyurtma keldi!</b>",
         "",
-        f"👤 Mijoz: {order.get('customer_name') or 'Ism ko`rsatilmagan'}",
-        f"📞 Telefon: {order['customer_phone']}",
+        f"👤 Mijoz: {order.get('customer_name') or 'Ism ko\u2019rsatilmagan'}",
     ]
+    if order.get("customer_username"):
+        lines.append(f"✈️ Telegram: @{order['customer_username']} — shu orqali yozing")
+    else:
+        lines.append("✈️ Mijozda Telegram username yo'q — u sizga o'zi yozishi kerak")
     if order.get("address_text"):
         lines.append(f"📍 Manzil: {order['address_text']}")
-    if order.get("customer_username"):
-        lines.append(f"✈️ Telegram: @{order['customer_username']}")
     text = "\n".join(lines)
     api_base = f"https://api.telegram.org/bot{BOT_TOKEN}"
     try:
@@ -144,12 +145,6 @@ async def notify_master_about_order(master: dict, order: dict):
                 "text": text,
                 "parse_mode": "HTML",
             })
-            if order.get("lat") is not None and order.get("lon") is not None:
-                await client.post(f"{api_base}/sendLocation", json={
-                    "chat_id": master["telegram_id"],
-                    "latitude": order["lat"],
-                    "longitude": order["lon"],
-                })
     except Exception:
         pass  # Xabar yuborilmasa ham buyurtma saqlanib qoladi
 
@@ -157,28 +152,20 @@ async def notify_master_about_order(master: dict, order: dict):
 @app.post("/api/orders")
 async def create_order(
     master_id: int = Form(...),
-    customer_telegram_id: int | None = Form(default=None),
+    customer_telegram_id: int = Form(...),
     customer_username: str | None = Form(default=None),
     customer_name: str | None = Form(default=None),
-    customer_phone: str = Form(...),
-    lat: float | None = Form(default=None),
-    lon: float | None = Form(default=None),
     address_text: str | None = Form(default=None),
 ):
     master = db.get_master(master_id)
     if not master:
         raise HTTPException(status_code=404, detail="Usta topilmadi")
-    if len(customer_phone.strip()) < 7:
-        raise HTTPException(status_code=400, detail="Telefon raqami noto'g'ri")
 
     order_id = db.create_order({
         "master_id": master_id,
         "customer_telegram_id": customer_telegram_id,
         "customer_username": (customer_username or "").strip() or None,
         "customer_name": (customer_name or "").strip() or None,
-        "customer_phone": customer_phone.strip(),
-        "lat": lat,
-        "lon": lon,
         "address_text": (address_text or "").strip() or None,
     })
 

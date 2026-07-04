@@ -45,7 +45,7 @@ def init_db():
                 customer_telegram_id INTEGER,
                 customer_username TEXT,
                 customer_name TEXT,
-                customer_phone TEXT NOT NULL,
+                customer_phone TEXT,
                 lat REAL,
                 lon REAL,
                 address_text TEXT,
@@ -181,16 +181,14 @@ def create_order(data: dict) -> int:
         cur = conn.execute("""
             INSERT INTO orders
             (master_id, customer_telegram_id, customer_username, customer_name,
-             customer_phone, lat, lon, address_text, created_at, status)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'new')
+             customer_phone, address_text, created_at, status)
+            VALUES (?, ?, ?, ?, ?, ?, ?, 'new')
         """, (
             data["master_id"],
             data.get("customer_telegram_id"),
             data.get("customer_username"),
             data.get("customer_name"),
-            data["customer_phone"],
-            data.get("lat"),
-            data.get("lon"),
+            data.get("customer_phone"),
             data.get("address_text"),
             datetime.now(timezone.utc).isoformat(),
         ))

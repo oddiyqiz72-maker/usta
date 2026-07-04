@@ -351,24 +351,17 @@ const orderModal = document.getElementById("orderModal");
 const orderModalBackdrop = document.getElementById("orderModalBackdrop");
 const orderModalMaster = document.getElementById("orderModalMaster");
 const orderAddressInput = document.getElementById("orderAddress");
-const orderLocationBtn = document.getElementById("orderLocationBtn");
-const orderLocationStatus = document.getElementById("orderLocationStatus");
 const orderModalError = document.getElementById("orderModalError");
 const orderSubmitBtn = document.getElementById("orderSubmitBtn");
 const orderCancelBtn = document.getElementById("orderCancelBtn");
 const bonusToast = document.getElementById("bonusToast");
 
 let currentOrderMasterId = null;
-let capturedLat = null;
-let capturedLon = null;
 
 function openOrderModal(masterId, masterName) {
   currentOrderMasterId = masterId;
-  capturedLat = null;
-  capturedLon = null;
   orderModalMaster.textContent = `Usta: ${masterName}`;
   orderAddressInput.value = "";
-  orderLocationStatus.textContent = "";
   orderModalError.textContent = "";
   orderModal.classList.remove("modal--hidden");
 }
@@ -379,25 +372,6 @@ function closeOrderModal() {
 
 orderModalBackdrop.addEventListener("click", closeOrderModal);
 orderCancelBtn.addEventListener("click", closeOrderModal);
-
-orderLocationBtn.addEventListener("click", () => {
-  if (!navigator.geolocation) {
-    orderLocationStatus.textContent = "Bu qurilmada joylashuvni aniqlab bo'lmadi. Manzilni qo'lda yozing.";
-    return;
-  }
-  orderLocationStatus.textContent = "Joylashuv aniqlanmoqda…";
-  navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      capturedLat = pos.coords.latitude;
-      capturedLon = pos.coords.longitude;
-      orderLocationStatus.textContent = "✅ Joylashuvingiz olindi va buyurtmaga qo'shiladi.";
-    },
-    () => {
-      orderLocationStatus.textContent = "Joylashuvga ruxsat berilmadi. Manzilni qo'lda yozishingiz mumkin.";
-    },
-    { enableHighAccuracy: true, timeout: 8000 }
-  );
-});
 
 orderSubmitBtn.addEventListener("click", async () => {
   orderModalError.textContent = "";
@@ -418,8 +392,6 @@ orderSubmitBtn.addEventListener("click", async () => {
   fd.set("customer_username", tgUser.username || "");
   fd.set("customer_name", autoName);
   if (orderAddressInput.value.trim()) fd.set("address_text", orderAddressInput.value.trim());
-  if (capturedLat !== null) fd.set("lat", capturedLat);
-  if (capturedLon !== null) fd.set("lon", capturedLon);
 
   try {
     const res = await fetch("/api/orders", { method: "POST", body: fd });
@@ -612,7 +584,6 @@ async function loadProfile() {
             ? `✈️ <a href="https://t.me/${escapeHtml(o.customer_username)}" target="_blank">@${escapeHtml(o.customer_username)}</a> orqali yozing<br/>`
             : `✈️ Telegram username yo'q — mijoz sizga o'zi yozishi kerak<br/>`}
           ${o.address_text ? `📍 ${escapeHtml(o.address_text)}<br/>` : ""}
-          ${o.lat && o.lon ? `<a href="https://maps.google.com/?q=${o.lat},${o.lon}" target="_blank">🗺️ Xaritada ko'rish</a><br/>` : ""}
           🧰 ${escapeHtml(o.master_name)}
         </div>
       `;
