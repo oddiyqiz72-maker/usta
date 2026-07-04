@@ -125,10 +125,11 @@ async def notify_master_about_order(master: dict, order: dict):
     """Ustaga yangi buyurtma haqida Telegram orqali xabar yuboradi (best-effort)."""
     if not BOT_TOKEN or not master.get("telegram_id"):
         return
+    customer_display_name = order.get('customer_name') or "Ism ko'rsatilmagan"
     lines = [
         "🧾 <b>Sizga yangi buyurtma keldi!</b>",
         "",
-        f"👤 Mijoz: {order.get('customer_name') or 'Ism ko\u2019rsatilmagan'}",
+        f"👤 Mijoz: {customer_display_name}",
     ]
     if order.get("customer_username"):
         lines.append(f"✈️ Telegram: @{order['customer_username']} — shu orqali yozing")
