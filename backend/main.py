@@ -128,7 +128,7 @@ async def notify_master_about_order(master: dict, order: dict):
     lines = [
         "🧾 <b>Sizga yangi buyurtma keldi!</b>",
         "",
-        f"👤 Mijoz: {order.get('customer_name') or 'Ism ko\u2019rsatilmagan'}",
+        f"👤 Mijoz: {order.get('customer_name') or 'Ism ko`rsatilmagan'}",
         f"📞 Telefon: {order['customer_phone']}",
     ]
     if order.get("address_text"):
