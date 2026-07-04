@@ -1,0 +1,15 @@
+{
+  "name": "global-donat-bot",
+  "version": "1.0.0",
+  "description": "Telegram bot - o'yin donat sotib olish, balans to'ldirish, admin guruhda tasdiqlash",
+  "main": "bot.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node bot.js"
+  },
+  "dependencies": {
+    "telegraf": "^4.16.3",
+    "better-sqlite3": "^11.3.0",
+    "dotenv": "^16.4.5"
+  }
+}

@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="uz">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Global Donat</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css" />
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <div id="app">
+
+    <!-- Header -->
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark">◆</span>
+        <span>Global Donat</span>
+      </div>
+      <button class="balance-pill" id="balancePill">
+        <span class="coin">₴</span>
+        <span id="balanceValue">0</span>
+        <span class="plus" id="openTopup">+</span>
+      </button>
+    </header>
+
+    <!-- Screens -->
+    <main id="screens">
+
+      <!-- HOME -->
+      <section class="screen active" id="screen-home">
+        <div class="hero">
+          <h1>Hammasi bitta<br/>ilovada</h1>
+          <p>O'yin donat, Premium, Stars va NFT — bir joyda</p>
+        </div>
+        <div class="segmented">
+          <button class="seg-btn active" data-seg="games">O'yinlar</button>
+          <button class="seg-btn" data-seg="apps">App</button>
+        </div>
+        <div class="game-grid" id="gameGrid"></div>
+      </section>
+
+      <!-- PRODUCTS -->
+      <section class="screen" id="screen-products">
+        <button class="back-btn" data-back="screen-home">← Orqaga</button>
+        <div class="game-header" id="gameHeaderInfo"></div>
+        <div class="product-list" id="productList"></div>
+      </section>
+
+      <!-- CHECKOUT -->
+      <section class="screen" id="screen-checkout">
+        <button class="back-btn" data-back="screen-products">← Orqaga</button>
+        <div class="checkout-card">
+          <img class="checkout-icon" id="checkoutIcon" src="" alt="" />
+          <div class="checkout-title" id="checkoutTitle"></div>
+
+          <div class="nft-mode" id="nftModeBox" style="display:none">
+            <button class="mode-btn active" data-mode="buy" id="modeBuyBtn">🛒 Sotib olish</button>
+            <button class="mode-btn" data-mode="rent" id="modeRentBtn">⏳ Ijaraga olish</button>
+          </div>
+
+          <div class="field" id="rentDaysField" style="display:none">
+            <label>Necha kunga ijaraga olasiz?</label>
+            <input type="number" id="rentDaysInput" min="1" value="1" />
+          </div>
+
+          <div class="checkout-price" id="checkoutPrice"></div>
+
+          <div class="field">
+            <label id="playerIdLabel">Player ID</label>
+            <input type="text" id="playerIdInput" placeholder="ID kiriting..." />
+          </div>
+          <div class="field" id="serverIdField" style="display:none">
+            <label>Server ID</label>
+            <input type="text" id="serverIdInput" placeholder="Server ID..." inputmode="numeric" />
+          </div>
+          <button class="primary-btn" id="confirmOrderBtn">✅ Xaridni tasdiqlash</button>
+        </div>
+      </section>
+
+      <!-- HISTORY -->
+      <section class="screen" id="screen-history">
+        <h2 class="section-title">Buyurtmalar tarixi</h2>
+        <div class="order-list" id="orderList"></div>
+      </section>
+
+      <!-- PROFILE -->
+      <section class="screen" id="screen-profile">
+        <h2 class="section-title">Profil</h2>
+        <div class="profile-card">
+          <div class="avatar" id="avatarInitial">?</div>
+          <div class="profile-name" id="profileName">—</div>
+          <div class="profile-balance"><span id="profileBalance">0</span> so'm</div>
+        </div>
+        <button class="secondary-btn" id="profileTopupBtn">💳 Balansni to'ldirish</button>
+      </section>
+
+    </main>
+
+    <!-- Bottom nav -->
+    <nav class="tabbar">
+      <button class="tab active" data-tab="screen-home">
+        <span class="tab-icon">⌂</span><span>Asosiy</span>
+      </button>
+      <button class="tab" data-tab="screen-history">
+        <span class="tab-icon">◷</span><span>Tarix</span>
+      </button>
+      <button class="tab" data-tab="screen-profile">
+        <span class="tab-icon">◍</span><span>Profil</span>
+      </button>
+    </nav>
+
+    <!-- Topup modal -->
+    <div class="modal-backdrop" id="topupBackdrop">
+      <div class="modal">
+        <div class="modal-title">💳 Balansni to'ldirish</div>
+        <div class="modal-sub">To'lov summasini kiriting</div>
+        <input type="number" id="topupAmount" class="amount-input" placeholder="Summa kiriting..." />
+        <div class="min-max" id="minMaxHint"></div>
+        <div class="chip-grid">
+          <button class="chip" data-amt="10000">10K</button>
+          <button class="chip" data-amt="25000">25K</button>
+          <button class="chip" data-amt="50000">50K</button>
+          <button class="chip" data-amt="100000">100K</button>
+          <button class="chip" data-amt="500000">500K</button>
+          <button class="chip" data-amt="1000000">1M</button>
+        </div>
+        <button class="primary-btn" id="payBtn">💳 To'lash</button>
+        <button class="ghost-btn" id="closeTopup">Yopish</button>
+      </div>
+    </div>
+
+    <!-- Waiting payment modal -->
+    <div class="modal-backdrop" id="waitBackdrop">
+      <div class="modal">
+        <div class="modal-title">⏳ To'lovni kutish</div>
+        <div class="wait-amount" id="waitAmount"></div>
+        <div class="modal-sub">Quyidagi kartaga aynan shu summani o'tkazing:</div>
+        <div class="card-box" id="cardBox"></div>
+        <div class="toast" id="toastMsg"></div>
+        <button class="primary-btn success" id="waitOkBtn">✅ Yubordim, tekshirilmoqda</button>
+      </div>
+    </div>
+
+    <div class="snackbar" id="snackbar"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
