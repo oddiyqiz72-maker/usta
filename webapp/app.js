@@ -17,6 +17,7 @@ let activeSpecialty = "";
 const screens = {
   search: document.getElementById("screen-search"),
   register: document.getElementById("screen-register"),
+  profile: document.getElementById("screen-profile"),
 };
 const tabButtons = document.querySelectorAll(".tabbar__item");
 
@@ -30,13 +31,33 @@ function showTab(name) {
 }
 
 tabButtons.forEach((btn) => {
-  btn.addEventListener("click", () => showTab(btn.dataset.tab));
+  btn.addEventListener("click", () => {
+    showTab(btn.dataset.tab);
+    if (btn.dataset.tab === "profile") loadProfile();
+  });
 });
 
 // Open tab based on ?tab= param sent from the bot's WebApp buttons
 const urlParams = new URLSearchParams(window.location.search);
 const initialTab = urlParams.get("tab");
 if (initialTab === "register") showTab("register");
+if (initialTab === "profile") showTab("profile");
+
+// ---------- DARK / LIGHT THEME ----------
+const THEME_KEY = "usta_theme";
+const themeToggleBtn = document.getElementById("themeToggle");
+
+function applyTheme(theme) {
+  document.body.classList.toggle("theme-dark", theme === "dark");
+  themeToggleBtn.textContent = theme === "dark" ? "☀️" : "🌙";
+}
+applyTheme(localStorage.getItem(THEME_KEY) || "light");
+themeToggleBtn.addEventListener("click", () => {
+  const next = document.body.classList.contains("theme-dark") ? "light" : "dark";
+  localStorage.setItem(THEME_KEY, next);
+  applyTheme(next);
+  if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
+});
 
 // ---------- LOAD REFERENCE DATA ----------
 async function loadReferenceData() {
@@ -142,15 +163,29 @@ function renderMasters(masters) {
         <div class="mastercard__meta">
           <span><b>${m.age}</b> yosh</span>
           ${m.price_info ? `<span>${escapeHtml(m.price_info)}</span>` : ""}
+          ${renderStarsBadge(m.avg_rating, m.ratings_count)}
         </div>
         ${m.bio ? `<p class="mastercard__bio">${escapeHtml(m.bio)}</p>` : ""}
         <div class="mastercard__actions">
-          <a class="mastercard__call" href="tel:${escapeHtml(m.phone.replace(/\s/g, ""))}">📞 ${escapeHtml(m.phone)}</a>
+          <a class="mastercard__call" href="tel:${escapeHtml(m.phone.replace(/\s/g, ""))}">📞 Qo'ng'iroq</a>
+          <button type="button" class="mastercard__order" data-master-id="${m.id}" data-master-name="${escapeHtml(m.full_name)}">🧾 Buyurtma</button>
+          ${m.telegram_username ? `<a class="mastercard__tg" href="https://t.me/${escapeHtml(m.telegram_username)}" target="_blank">✈️</a>` : ""}
         </div>
       </div>
     `;
     resultsEl.appendChild(card);
   });
+
+  resultsEl.querySelectorAll(".mastercard__order").forEach((btn) => {
+    btn.addEventListener("click", () => openOrderModal(btn.dataset.masterId, btn.dataset.masterName));
+  });
+}
+
+function renderStarsBadge(avg, count) {
+  if (!avg || !count) {
+    return `<span class="mastercard__rating mastercard__rating--empty">☆ Hali baholanmagan</span>`;
+  }
+  return `<span class="mastercard__rating">⭐ ${avg} <em>(${count})</em></span>`;
 }
 
 function escapeHtml(str) {
@@ -311,9 +346,304 @@ async function loadMyListings() {
   });
 }
 
+// ---------- ORDER MODAL (buyurtma berish) ----------
+const orderModal = document.getElementById("orderModal");
+const orderModalBackdrop = document.getElementById("orderModalBackdrop");
+const orderModalMaster = document.getElementById("orderModalMaster");
+const orderNameInput = document.getElementById("orderName");
+const orderPhoneInput = document.getElementById("orderPhone");
+const orderAddressInput = document.getElementById("orderAddress");
+const orderLocationBtn = document.getElementById("orderLocationBtn");
+const orderLocationStatus = document.getElementById("orderLocationStatus");
+const orderModalError = document.getElementById("orderModalError");
+const orderSubmitBtn = document.getElementById("orderSubmitBtn");
+const orderCancelBtn = document.getElementById("orderCancelBtn");
+const bonusToast = document.getElementById("bonusToast");
+
+let currentOrderMasterId = null;
+let capturedLat = null;
+let capturedLon = null;
+
+function openOrderModal(masterId, masterName) {
+  currentOrderMasterId = masterId;
+  capturedLat = null;
+  capturedLon = null;
+  orderModalMaster.textContent = `Usta: ${masterName}`;
+  orderNameInput.value = tgUser && tgUser.first_name ? tgUser.first_name : "";
+  orderPhoneInput.value = "";
+  orderAddressInput.value = "";
+  orderLocationStatus.textContent = "";
+  orderModalError.textContent = "";
+  orderModal.classList.remove("modal--hidden");
+}
+
+function closeOrderModal() {
+  orderModal.classList.add("modal--hidden");
+}
+
+orderModalBackdrop.addEventListener("click", closeOrderModal);
+orderCancelBtn.addEventListener("click", closeOrderModal);
+
+orderLocationBtn.addEventListener("click", () => {
+  if (!navigator.geolocation) {
+    orderLocationStatus.textContent = "Bu qurilmada joylashuvni aniqlab bo'lmadi. Manzilni qo'lda yozing.";
+    return;
+  }
+  orderLocationStatus.textContent = "Joylashuv aniqlanmoqda…";
+  navigator.geolocation.getCurrentPosition(
+    (pos) => {
+      capturedLat = pos.coords.latitude;
+      capturedLon = pos.coords.longitude;
+      orderLocationStatus.textContent = "✅ Joylashuvingiz olindi va buyurtmaga qo'shiladi.";
+    },
+    () => {
+      orderLocationStatus.textContent = "Joylashuvga ruxsat berilmadi. Manzilni qo'lda yozishingiz mumkin.";
+    },
+    { enableHighAccuracy: true, timeout: 8000 }
+  );
+});
+
+orderSubmitBtn.addEventListener("click", async () => {
+  orderModalError.textContent = "";
+  const phone = orderPhoneInput.value.trim();
+  if (phone.length < 7) {
+    orderModalError.textContent = "Iltimos, telefon raqamingizni to'g'ri kiriting.";
+    return;
+  }
+
+  orderSubmitBtn.disabled = true;
+  orderSubmitBtn.textContent = "Yuborilmoqda…";
+
+  const fd = new FormData();
+  fd.set("master_id", currentOrderMasterId);
+  fd.set("customer_name", orderNameInput.value.trim());
+  fd.set("customer_phone", phone);
+  if (orderAddressInput.value.trim()) fd.set("address_text", orderAddressInput.value.trim());
+  if (capturedLat !== null) fd.set("lat", capturedLat);
+  if (capturedLon !== null) fd.set("lon", capturedLon);
+  if (tgUser) {
+    fd.set("customer_telegram_id", tgUser.id);
+    fd.set("customer_username", tgUser.username || "");
+  }
+
+  try {
+    const res = await fetch("/api/orders", { method: "POST", body: fd });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Xatolik yuz berdi");
+    }
+    const data = await res.json();
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+    closeOrderModal();
+    if (data.bonus) showBonusToast();
+  } catch (err) {
+    orderModalError.textContent = err.message;
+  } finally {
+    orderSubmitBtn.disabled = false;
+    orderSubmitBtn.textContent = "Buyurtmani yuborish";
+  }
+});
+
+function showBonusToast() {
+  bonusToast.classList.remove("toast--hidden");
+  setTimeout(() => bonusToast.classList.add("toast--hidden"), 5000);
+}
+
+// ---------- RATING MODAL (xizmatdan keyin baholash) ----------
+const rateModal = document.getElementById("rateModal");
+const rateModalBackdrop = document.getElementById("rateModalBackdrop");
+const rateModalMaster = document.getElementById("rateModalMaster");
+const starPicker = document.getElementById("starPicker");
+const rateComment = document.getElementById("rateComment");
+const rateModalError = document.getElementById("rateModalError");
+const rateSubmitBtn = document.getElementById("rateSubmitBtn");
+const rateCancelBtn = document.getElementById("rateCancelBtn");
+
+let currentRateOrderId = null;
+let currentRateStars = 0;
+
+function openRateModal(orderId, masterName) {
+  currentRateOrderId = orderId;
+  currentRateStars = 0;
+  rateModalMaster.textContent = `Usta: ${masterName}`;
+  rateComment.value = "";
+  rateModalError.textContent = "";
+  updateStarPicker();
+  rateModal.classList.remove("modal--hidden");
+}
+
+function closeRateModal() {
+  rateModal.classList.add("modal--hidden");
+}
+
+function updateStarPicker() {
+  starPicker.querySelectorAll(".star-picker__star").forEach((btn) => {
+    btn.classList.toggle("is-active", Number(btn.dataset.star) <= currentRateStars);
+  });
+}
+
+starPicker.addEventListener("click", (e) => {
+  const btn = e.target.closest(".star-picker__star");
+  if (!btn) return;
+  currentRateStars = Number(btn.dataset.star);
+  updateStarPicker();
+  if (tg && tg.HapticFeedback) tg.HapticFeedback.impactOccurred("light");
+});
+
+rateModalBackdrop.addEventListener("click", closeRateModal);
+rateCancelBtn.addEventListener("click", closeRateModal);
+
+rateSubmitBtn.addEventListener("click", async () => {
+  rateModalError.textContent = "";
+  if (!currentRateStars) {
+    rateModalError.textContent = "Iltimos, yulduzcha orqali baho tanlang.";
+    return;
+  }
+  rateSubmitBtn.disabled = true;
+  rateSubmitBtn.textContent = "Yuborilmoqda…";
+
+  const fd = new FormData();
+  fd.set("customer_telegram_id", tgUser.id);
+  fd.set("stars", currentRateStars);
+  if (rateComment.value.trim()) fd.set("comment", rateComment.value.trim());
+
+  try {
+    const res = await fetch(`/api/orders/${currentRateOrderId}/rate`, { method: "POST", body: fd });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || "Xatolik yuz berdi");
+    }
+    if (tg && tg.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
+    closeRateModal();
+    loadProfile();
+    fetchAndRenderMasters();
+  } catch (err) {
+    rateModalError.textContent = err.message;
+  } finally {
+    rateSubmitBtn.disabled = false;
+    rateSubmitBtn.textContent = "Baholashni yuborish";
+  }
+});
+
+// ---------- PROFILE TAB ----------
+async function loadProfile() {
+  const statsEl = document.getElementById("profileStats");
+  const ordersMineEl = document.getElementById("ordersMine");
+  const ordersEl = document.getElementById("ordersReceived");
+  const listingsEl = document.getElementById("profileListings");
+
+  if (!tgUser) {
+    statsEl.innerHTML = `<p class="empty-hint">Profil faqat Telegram orqali ochilganda ishlaydi.</p>`;
+    return;
+  }
+
+  const [statsRes, ordersRes, mineOrdersRes, mineRes] = await Promise.all([
+    fetch(`/api/customer-stats/${tgUser.id}`),
+    fetch(`/api/orders/received/${tgUser.id}`),
+    fetch(`/api/orders/mine/${tgUser.id}`),
+    fetch(`/api/my-masters/${tgUser.id}`),
+  ]);
+  const stats = await statsRes.json();
+  const orders = await ordersRes.json();
+  const myOrders = await mineOrdersRes.json();
+  const mine = await mineRes.json();
+
+  if (!myOrders.length) {
+    ordersMineEl.innerHTML = `<p class="empty-hint">Hozircha buyurtma bermagansiz.</p>`;
+  } else {
+    ordersMineEl.innerHTML = "";
+    myOrders.forEach((o) => {
+      const row = document.createElement("div");
+      row.className = "order-row";
+      const date = new Date(o.created_at).toLocaleString("uz-UZ");
+      const rated = o.my_rating_stars != null;
+      row.innerHTML = `
+        <div class="order-row__top">
+          <span>🧰 ${escapeHtml(o.master_name)}</span>
+          <span>${date}</span>
+        </div>
+        <div class="order-row__meta">
+          ${rated
+            ? `<span class="order-row__rated">⭐ Siz baholadingiz: ${o.my_rating_stars}/5${o.my_rating_comment ? ` — "${escapeHtml(o.my_rating_comment)}"` : ""}</span>`
+            : `<button type="button" class="btn btn--ghost btn--small rate-btn" data-order-id="${o.id}" data-master-name="${escapeHtml(o.master_name)}">⭐ Xizmatni baholash</button>`}
+        </div>
+      `;
+      ordersMineEl.appendChild(row);
+    });
+    ordersMineEl.querySelectorAll(".rate-btn").forEach((btn) => {
+      btn.addEventListener("click", () => openRateModal(btn.dataset.orderId, btn.dataset.masterName));
+    });
+  }
+
+  statsEl.innerHTML = `
+    <div class="profile-stat">
+      <div class="profile-stat__num">${stats.orders_count}</div>
+      <div class="profile-stat__label">SIZ BERGAN<br/>BUYURTMALAR</div>
+    </div>
+    <div class="profile-stat">
+      <div class="profile-stat__num">${orders.length}</div>
+      <div class="profile-stat__label">SIZGA KELGAN<br/>BUYURTMALAR</div>
+    </div>
+    <div class="profile-stat">
+      <div class="profile-stat__num">${mine.length}</div>
+      <div class="profile-stat__label">FAOL<br/>E'LONLARINGIZ</div>
+    </div>
+  `;
+
+  if (!orders.length) {
+    ordersEl.innerHTML = `<p class="empty-hint">Hozircha buyurtma yo'q.</p>`;
+  } else {
+    ordersEl.innerHTML = "";
+    orders.forEach((o) => {
+      const row = document.createElement("div");
+      row.className = "order-row";
+      const date = new Date(o.created_at).toLocaleString("uz-UZ");
+      row.innerHTML = `
+        <div class="order-row__top">
+          <span>${escapeHtml(o.customer_name || "Mijoz")}</span>
+          <span>${date}</span>
+        </div>
+        <div class="order-row__meta">
+          📞 <a href="tel:${escapeHtml(o.customer_phone.replace(/\s/g, ""))}">${escapeHtml(o.customer_phone)}</a><br/>
+          ${o.address_text ? `📍 ${escapeHtml(o.address_text)}<br/>` : ""}
+          ${o.lat && o.lon ? `<a href="https://maps.google.com/?q=${o.lat},${o.lon}" target="_blank">🗺️ Xaritada ko'rish</a><br/>` : ""}
+          🧰 ${escapeHtml(o.master_name)}
+        </div>
+      `;
+      ordersEl.appendChild(row);
+    });
+  }
+
+  if (!mine.length) {
+    listingsEl.innerHTML = `<p class="empty-hint">Siz hali usta sifatida ro'yxatdan o'tmagansiz.</p>`;
+  } else {
+    listingsEl.innerHTML = "";
+    mine.forEach((m) => {
+      const row = document.createElement("div");
+      row.className = "my-listing-row";
+      row.innerHTML = `
+        <span class="my-listing-row__name">${escapeHtml(m.full_name)} · ${specialtyLabel(m.specialty)}</span>
+        <button class="my-listing-row__del" data-id="${m.id}">O'chirish</button>
+      `;
+      listingsEl.appendChild(row);
+    });
+    listingsEl.querySelectorAll(".my-listing-row__del").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        const fd = new FormData();
+        fd.set("telegram_id", tgUser.id);
+        await fetch(`/api/masters/${btn.dataset.id}/delete`, { method: "POST", body: fd });
+        loadProfile();
+        loadMyListings();
+        fetchAndRenderMasters();
+      });
+    });
+  }
+}
+
 // ---------- INIT ----------
 (async function init() {
   await loadReferenceData();
   await fetchAndRenderMasters();
   await loadMyListings();
+  if (initialTab === "profile") loadProfile();
 })();

@@ -23,6 +23,25 @@
   --shadow-tag: 0 1px 0 rgba(22,32,43,0.04), 0 6px 16px rgba(22,32,43,0.06);
 }
 
+body.theme-dark{
+  --bg: #0F161D;
+  --surface: #1B242D;
+  --ink: #EAF0F5;
+  --muted: #8C99A6;
+  --border: #2C3843;
+  --accent: #FF7A50;
+  --accent-ink: #FFDCC9;
+  --accent-2: #3FB6E0;
+  --success: #3ED17A;
+  --success-bg: #12301F;
+  --warning-bg: #3A2A12;
+  --warning-ink: #FFC98A;
+  --shadow-tag: 0 1px 0 rgba(0,0,0,0.2), 0 6px 16px rgba(0,0,0,0.35);
+}
+body.theme-dark .mastercard__stamp{ color: var(--accent-ink); }
+
+* { transition: background-color .2s ease, border-color .2s ease, color .2s ease; }
+
 *{ box-sizing: border-box; }
 html,body{ margin:0; padding:0; }
 
@@ -72,6 +91,17 @@ body{
   letter-spacing: 0.5px;
   color: var(--accent-2);
   line-height:1;
+}
+.topbar__title{ flex:1; }
+.theme-toggle{
+  width:40px; height:40px;
+  border-radius: var(--radius-s);
+  border: 1.5px solid var(--border);
+  background: var(--surface);
+  font-size:18px;
+  cursor:pointer;
+  flex-shrink:0;
+  display:flex; align-items:center; justify-content:center;
 }
 
 /* ---------- SCREENS ---------- */
@@ -377,3 +407,150 @@ body{
 @media (min-width: 600px){
   .app{ box-shadow: 0 0 0 1px var(--border); }
 }
+
+/* ---------- ORDER + TELEGRAM BUTTONS ON CARD ---------- */
+.mastercard__order{
+  flex:1;
+  text-align:center;
+  text-decoration:none;
+  border: 1.5px solid var(--accent-2);
+  background: transparent;
+  color: var(--accent-2);
+  font-weight:700;
+  font-size: 13.5px;
+  padding: 9px 10px;
+  border-radius: var(--radius-s);
+  cursor:pointer;
+  font-family:'Inter', sans-serif;
+}
+.mastercard__tg{
+  flex-shrink:0;
+  text-decoration:none;
+  background: var(--accent-2);
+  color:#fff;
+  font-weight:700;
+  font-size: 15px;
+  padding: 9px 12px;
+  border-radius: var(--radius-s);
+  display:flex; align-items:center; justify-content:center;
+}
+
+/* ---------- MODAL (ORDER FORM) ---------- */
+.modal--hidden{ display:none; }
+.modal{
+  position:fixed; inset:0; z-index:50;
+  display:flex; align-items:flex-end; justify-content:center;
+}
+.modal__backdrop{
+  position:absolute; inset:0;
+  background: rgba(10,14,18,0.55);
+}
+.modal__sheet{
+  position:relative;
+  width:100%; max-width:560px;
+  background: var(--surface);
+  border-radius: 20px 20px 0 0;
+  padding: 20px 16px calc(20px + env(safe-area-inset-bottom));
+  max-height: 88vh;
+  overflow-y:auto;
+  box-shadow: 0 -8px 30px rgba(0,0,0,0.25);
+}
+.modal__title{
+  font-family:'Oswald', sans-serif;
+  font-size: 19px;
+  color: var(--accent-2);
+  margin: 4px 0 2px;
+}
+.modal__master{ color: var(--muted); font-size:13px; margin: 0 0 16px; }
+.modal__location-status{ font-size:12.5px; color: var(--muted); margin: 6px 0 4px; min-height:1em; }
+.btn--text{ background:none; border:none; color: var(--muted); font-weight:600; margin-top:8px; }
+
+/* ---------- BONUS TOAST ---------- */
+.toast{
+  position:fixed;
+  left:50%; bottom:96px;
+  transform: translateX(-50%);
+  max-width: 520px;
+  width: calc(100% - 32px);
+  background: var(--accent-2);
+  color:#fff;
+  font-weight:600;
+  font-size:13.5px;
+  text-align:center;
+  padding: 14px 16px;
+  border-radius: var(--radius-m);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+  z-index: 60;
+}
+.toast--hidden{ display:none; }
+
+/* ---------- PROFILE ---------- */
+.profile-stats{
+  display:flex; gap:10px;
+}
+.profile-stat{
+  flex:1;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  padding: 14px;
+  text-align:center;
+}
+.profile-stat__num{
+  font-family:'JetBrains Mono', monospace;
+  font-size: 24px;
+  font-weight:700;
+  color: var(--accent-2);
+}
+.profile-stat__label{ font-size:11.5px; color: var(--muted); font-weight:600; margin-top:2px; }
+
+.orders-list{ display:flex; flex-direction:column; gap:10px; }
+.order-row{
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  padding: 12px;
+}
+.order-row__top{ display:flex; justify-content:space-between; font-weight:700; font-size:13.5px; margin-bottom:4px; }
+.order-row__meta{ font-size:12.5px; color: var(--muted); line-height:1.5; }
+.order-row__meta a{ color: var(--accent-2); text-decoration:none; font-weight:600; }
+.order-row__rated{ color: var(--accent-2); font-weight:600; font-size:12.5px; }
+.empty-hint{ color: var(--muted); font-size:13px; }
+
+/* --- Rating badge on master cards --- */
+.mastercard__rating{
+  font-family:'JetBrains Mono', monospace;
+  font-weight:700;
+  font-size:12.5px;
+  color: var(--accent-2);
+}
+.mastercard__rating em{ font-style:normal; color: var(--muted); font-weight:500; }
+.mastercard__rating--empty{ color: var(--muted); font-weight:500; }
+
+/* --- Small ghost button (used for "rate service") --- */
+.btn--small{
+  padding: 8px 14px;
+  font-size: 12.5px;
+  margin-top: 4px;
+  display:inline-block;
+  width:auto;
+}
+
+/* --- Star picker for rating modal --- */
+.star-picker{
+  display:flex;
+  gap:8px;
+  justify-content:center;
+  margin: 14px 0 18px;
+}
+.star-picker__star{
+  background:none;
+  border:none;
+  font-size: 34px;
+  line-height:1;
+  color: var(--border);
+  cursor:pointer;
+  transition: transform .1s ease, color .15s ease;
+  padding:0;
+}
+.star-picker__star.is-active{ color:#f5b400; transform: scale(1.12); }

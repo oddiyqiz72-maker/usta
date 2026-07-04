@@ -22,6 +22,7 @@ from aiogram.types import (
 )
 
 load_dotenv()
+
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 WEBAPP_URL = os.getenv("WEBAPP_URL", "https://example.com")
 
@@ -43,6 +44,10 @@ def main_keyboard() -> InlineKeyboardMarkup:
         [InlineKeyboardButton(
             text="🧰 Usta bo'lib ro'yxatdan o'tish",
             web_app=WebAppInfo(url=f"{WEBAPP_URL}?tab=register")
+        )],
+        [InlineKeyboardButton(
+            text="👤 Profilim",
+            web_app=WebAppInfo(url=f"{WEBAPP_URL}?tab=profile")
         )],
     ])
 

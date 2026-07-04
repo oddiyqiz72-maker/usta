@@ -2,6 +2,7 @@ import os
 import uuid
 import shutil
 
+import httpx
 from fastapi import FastAPI, Form, File, UploadFile, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -9,6 +10,8 @@ from fastapi.responses import FileResponse
 
 from . import database as db
 from .constants import SPECIALTIES, CITIES
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 BASE_DIR = os.path.dirname(os.path.dirname(__file__))
 WEBAPP_DIR = os.path.join(BASE_DIR, "webapp")
@@ -81,6 +84,12 @@ async def register_master(
         raise HTTPException(status_code=400, detail="Hudud noto'g'ri tanlangan")
     if len(full_name.strip()) < 3:
         raise HTTPException(status_code=400, detail="Ism-familiya juda qisqa")
+    if telegram_id and db.masters_by_telegram_id(telegram_id):
+        raise HTTPException(
+            status_code=400,
+            detail="Siz allaqachon usta sifatida ro'yxatdan o'tgansiz. Bitta odam faqat bitta profil ocha oladi. "
+                   "Ma'lumotni o'zgartirish uchun avval eski e'loningizni o'chiring, so'ng qaytadan qo'shing."
+        )
     if photo.content_type not in ALLOWED_IMAGE_TYPES:
         raise HTTPException(status_code=400, detail="Rasm formati JPG, PNG yoki WEBP bo'lishi kerak")
 
@@ -110,6 +119,127 @@ async def register_master(
         "photo_path": f"/uploads/{filename}",
     })
     return {"id": new_id, "status": "ok"}
+
+
+async def notify_master_about_order(master: dict, order: dict):
+    """Ustaga yangi buyurtma haqida Telegram orqali xabar yuboradi (best-effort)."""
+    if not BOT_TOKEN or not master.get("telegram_id"):
+        return
+    lines = [
+        "🧾 <b>Sizga yangi buyurtma keldi!</b>",
+        "",
+        f"👤 Mijoz: {order.get('customer_name') or 'Ism ko\u2019rsatilmagan'}",
+        f"📞 Telefon: {order['customer_phone']}",
+    ]
+    if order.get("address_text"):
+        lines.append(f"📍 Manzil: {order['address_text']}")
+    if order.get("customer_username"):
+        lines.append(f"✈️ Telegram: @{order['customer_username']}")
+    text = "\n".join(lines)
+    api_base = f"https://api.telegram.org/bot{BOT_TOKEN}"
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            await client.post(f"{api_base}/sendMessage", json={
+                "chat_id": master["telegram_id"],
+                "text": text,
+                "parse_mode": "HTML",
+            })
+            if order.get("lat") is not None and order.get("lon") is not None:
+                await client.post(f"{api_base}/sendLocation", json={
+                    "chat_id": master["telegram_id"],
+                    "latitude": order["lat"],
+                    "longitude": order["lon"],
+                })
+    except Exception:
+        pass  # Xabar yuborilmasa ham buyurtma saqlanib qoladi
+
+
+@app.post("/api/orders")
+async def create_order(
+    master_id: int = Form(...),
+    customer_telegram_id: int | None = Form(default=None),
+    customer_username: str | None = Form(default=None),
+    customer_name: str | None = Form(default=None),
+    customer_phone: str = Form(...),
+    lat: float | None = Form(default=None),
+    lon: float | None = Form(default=None),
+    address_text: str | None = Form(default=None),
+):
+    master = db.get_master(master_id)
+    if not master:
+        raise HTTPException(status_code=404, detail="Usta topilmadi")
+    if len(customer_phone.strip()) < 7:
+        raise HTTPException(status_code=400, detail="Telefon raqami noto'g'ri")
+
+    order_id = db.create_order({
+        "master_id": master_id,
+        "customer_telegram_id": customer_telegram_id,
+        "customer_username": (customer_username or "").strip() or None,
+        "customer_name": (customer_name or "").strip() or None,
+        "customer_phone": customer_phone.strip(),
+        "lat": lat,
+        "lon": lon,
+        "address_text": (address_text or "").strip() or None,
+    })
+
+    orders_count = None
+    bonus = False
+    if customer_telegram_id:
+        orders_count = db.increment_customer_orders(customer_telegram_id)
+        bonus = bool(orders_count) and orders_count % 10 == 0
+
+    order = db.get_order(order_id)
+    await notify_master_about_order(master, order)
+
+    return {
+        "status": "ok",
+        "order_id": order_id,
+        "orders_count": orders_count,
+        "bonus": bonus,
+    }
+
+
+@app.get("/api/customer-stats/{telegram_id}")
+def customer_stats(telegram_id: int):
+    return {"orders_count": db.get_customer_orders(telegram_id)}
+
+
+@app.get("/api/orders/received/{telegram_id}")
+def orders_received(telegram_id: int):
+    return db.list_orders_for_master_telegram(telegram_id)
+
+
+@app.get("/api/orders/mine/{telegram_id}")
+def orders_mine(telegram_id: int):
+    """Shu mijoz o'zi bergan buyurtmalar ro'yxati (baholash uchun)."""
+    return db.list_orders_by_customer(telegram_id)
+
+
+@app.post("/api/orders/{order_id}/rate")
+async def rate_order(
+    order_id: int,
+    customer_telegram_id: int = Form(...),
+    stars: int = Form(...),
+    comment: str | None = Form(default=None),
+):
+    order = db.get_order(order_id)
+    if not order:
+        raise HTTPException(status_code=404, detail="Buyurtma topilmadi")
+    if order.get("customer_telegram_id") != customer_telegram_id:
+        raise HTTPException(status_code=403, detail="Bu buyurtmani baholashga ruxsatingiz yo'q")
+    if stars < 1 or stars > 5:
+        raise HTTPException(status_code=400, detail="Baho 1 dan 5 gacha bo'lishi kerak")
+
+    new_id = db.add_rating(
+        order_id=order_id,
+        master_id=order["master_id"],
+        customer_telegram_id=customer_telegram_id,
+        stars=stars,
+        comment=(comment or "").strip() or None,
+    )
+    if new_id is None:
+        raise HTTPException(status_code=400, detail="Bu buyurtma allaqachon baholangan")
+    return {"status": "ok", "rating_id": new_id}
 
 
 @app.post("/api/masters/{master_id}/delete")

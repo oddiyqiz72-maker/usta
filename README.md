@@ -108,9 +108,46 @@ Bu yerga yangi soha yoki shahar qo'shsangiz, avtomatik ravishda qidiruv filtrlar
 
 ---
 
+## ✨ Qo'shilgan yangi funksiyalar
+
+- **Dark/Light rejim** — header'dagi 🌙/☀️ tugmasi orqali, tanlov brauzerda saqlanadi
+- **Profil bo'limi** (pastki menyuda 👤) — o'zingiz bergan va sizga kelgan buyurtmalar, faol e'lonlaringiz statistikasi
+- **Buyurtma tizimi** — mijoz "🧾 Buyurtma" tugmasini bosib, ismi, telefon raqami va joylashuvini (GPS yoki qo'lda manzil) yuboradi; usta Telegram orqali darhol xabar oladi (matn + joylashuv)
+- **Sodiqlik aksiyasi** — mijoz 10-marta buyurtma bersa, ekranda tabriklovchi bonus xabari chiqadi
+- **Telegram orqali bog'lanish** — agar usta Telegram username kiritgan bo'lsa, kartochkada ✈️ tugmasi chiqadi
+- **Yangi logotip** — headerda maxsus chizilgan belgi (SVG)
+
 ## 🚀 Keyingi qadamlar (rivojlantirish g'oyalari)
 
 - Reyting/sharh tizimi (mijozlar ustani baholaydi)
 - Admin panel orqali e'lonlarni tasdiqlash/rad etish
 - Bir nechta rasm yuklash imkoniyati
-- Push-xabar: yangi mos usta paydo bo'lganda mijozga bot orqali xabar berish
+- Buyurtmani "bajarildi/bekor qilindi" statusiga o'tkazish imkoniyati
+
+---
+
+## 🔄 O'zgarishlarni GitHub va Render'ga qayta yuklash
+
+Kodni har safar o'zgartirganda (yoki Claude orqali yangi versiyasini olganda), uni ishlatish uchun 2 qadam kerak: **GitHub'ga yuklash**, keyin **Render avtomatik qayta deploy qiladi**.
+
+### Agar Git o'rnatilgan bo'lsa (tavsiya etiladi)
+
+Loyiha papkasida PowerShell/terminalda:
+```bash
+git add .
+git commit -m "Yangilanish"
+git push
+```
+Shu uchta buyruq yetarli — Render buni avtomatik ko'rib, o'zi qayta deploy qiladi (GitHub bilan bog'langan bo'lsa, "Auto-Deploy" yoqilgan holatda).
+
+### Agar Git yo'q bo'lsa — brauzer orqali
+
+1. `https://github.com/<username>/<repo>` sahifangizga o'ting
+2. **"Add file" → "Upload files"** tugmasini bosing
+3. Yangilangan fayl/papkalarni (masalan yangi `webapp` va `backend` papkalarini) sudrab tashlang — bir xil nomdagi fayllar avtomatik almashtiriladi (overwrite)
+4. **"Commit changes"** tugmasini bosing
+5. Render dashboard'ga o'ting — "Events" bo'limida yangi deploy avtomatik boshlanganini ko'rasiz (agar boshlanmasa, "Manual Deploy → Deploy latest commit" ni bosing)
+
+### Deploy holatini tekshirish
+
+Render dashboard → **"Logs"** bo'limida `Your service is live 🎉` yozuvi chiqsa — muvaffaqiyatli yangilangan.
