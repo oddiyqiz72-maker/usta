@@ -79,11 +79,26 @@ def init_db() -> None:
                 UNIQUE (master_id, customer_telegram_id)
             );
 
+            CREATE TABLE IF NOT EXISTS customers (
+                telegram_id INTEGER PRIMARY KEY,
+                telegram_username TEXT,
+                full_name TEXT,
+                phone TEXT,
+                location TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+
             CREATE INDEX IF NOT EXISTS idx_masters_active ON masters (is_active);
             CREATE INDEX IF NOT EXISTS idx_calls_master ON calls (master_id);
             CREATE INDEX IF NOT EXISTS idx_ratings_master ON ratings (master_id);
             """
         )
+        # Eski bazalarda 'location' ustuni bo'lmasligi mumkin — xavfsiz qo'shamiz
+        try:
+            conn.execute("ALTER TABLE calls ADD COLUMN location TEXT")
+        except sqlite3.OperationalError:
+            pass
         conn.commit()
 
 
@@ -180,16 +195,16 @@ def soft_delete_master(master_id: int, telegram_id: int) -> bool:
 # ------------------------------------------------------------------ calls --
 
 def insert_call(master_id: int, customer_telegram_id: int, customer_username: str | None,
-                 customer_name: str | None) -> int:
+                 customer_name: str | None, location: str | None = None) -> int:
     with _lock:
         conn = _get_conn()
         cur = conn.execute(
             """
             INSERT INTO calls (master_id, customer_telegram_id, customer_username,
-                                customer_name, status, created_at)
-            VALUES (?, ?, ?, ?, 'pending', ?)
+                                customer_name, status, created_at, location)
+            VALUES (?, ?, ?, ?, 'pending', ?, ?)
             """,
-            (master_id, customer_telegram_id, customer_username, customer_name, now_iso()),
+            (master_id, customer_telegram_id, customer_username, customer_name, now_iso(), location),
         )
         conn.commit()
         return cur.lastrowid
@@ -260,3 +275,48 @@ def insert_rating(master_id: int, customer_telegram_id: int, stars: int, comment
             return True
         except sqlite3.IntegrityError:
             return False
+
+
+# -------------------------------------------------------------- customers --
+
+def upsert_customer(telegram_id: int, telegram_username: str | None = None,
+                     full_name: str | None = None, phone: str | None = None,
+                     location: str | None = None) -> None:
+    """Mijoz kontaktini/joylashuvini saqlaydi yoki yangilaydi (faqat berilgan
+    maydonlarni yangilaydi, boshqalarini o'chirib yubormaydi)."""
+    with _lock:
+        conn = _get_conn()
+        existing = conn.execute(
+            "SELECT * FROM customers WHERE telegram_id = ?", (telegram_id,)
+        ).fetchone()
+        ts = now_iso()
+        if existing:
+            conn.execute(
+                """
+                UPDATE customers SET
+                    telegram_username = COALESCE(?, telegram_username),
+                    full_name = COALESCE(?, full_name),
+                    phone = COALESCE(?, phone),
+                    location = COALESCE(?, location),
+                    updated_at = ?
+                WHERE telegram_id = ?
+                """,
+                (telegram_username, full_name, phone, location, ts, telegram_id),
+            )
+        else:
+            conn.execute(
+                """
+                INSERT INTO customers
+                    (telegram_id, telegram_username, full_name, phone, location, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (telegram_id, telegram_username, full_name, phone, location, ts, ts),
+            )
+        conn.commit()
+
+
+def get_customer(telegram_id: int) -> sqlite3.Row | None:
+    conn = _get_conn()
+    return conn.execute(
+        "SELECT * FROM customers WHERE telegram_id = ?", (telegram_id,)
+    ).fetchone()

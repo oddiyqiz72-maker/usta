@@ -26,14 +26,15 @@
 
   <!-- ===== Tabs ===== -->
   <nav class="tabs" id="tabs">
-    <button class="tab-btn active" data-tab="search">Qidirish</button>
-    <button class="tab-btn" data-tab="register">Usta bo'lish</button>
+    <button class="tab-btn active" data-tab="masters">Ustalar</button>
+    <button class="tab-btn" data-tab="ai">AI Yordamchi</button>
+    <button class="tab-btn" data-tab="pro">Pro</button>
     <button class="tab-btn" data-tab="profile">Profil</button>
     <span class="tab-indicator" id="tabIndicator"></span>
   </nav>
 
-  <!-- ===== TAB: Qidirish ===== -->
-  <section class="tab-panel active" id="tab-search">
+  <!-- ===== TAB: Ustalar ===== -->
+  <section class="tab-panel active" id="tab-masters">
 
     <div class="search-bar">
       <span class="search-icon">🔎</span>
@@ -62,85 +63,54 @@
 
   </section>
 
-  <!-- ===== TAB: Ro'yxatdan o'tish ===== -->
-  <section class="tab-panel" id="tab-register">
-
-    <div class="form-card">
-      <div class="form-card-header">
-        <span class="form-card-tag">YANGI TEG</span>
-        <h2>Usta sifatida ro'yxatdan o'ting</h2>
-        <p class="form-card-hint">Ma'lumotlaringiz mijozlarga darhol ko'rinadi</p>
-      </div>
-
-      <form id="registerForm" class="tag-form" novalidate>
-
-        <div class="photo-upload" id="photoUpload">
-          <input type="file" id="photoInput" accept="image/jpeg,image/png,image/webp" hidden>
-          <div class="photo-preview" id="photoPreview">
-            <span class="photo-placeholder-icon">📷</span>
-            <span class="photo-placeholder-text">Rasm yuklash</span>
+  <!-- ===== TAB: AI Yordamchi ===== -->
+  <section class="tab-panel" id="tab-ai">
+    <div class="ai-chat">
+      <div class="ai-messages" id="aiMessages">
+        <div class="ai-msg ai-msg-bot">
+          <div class="ai-msg-bubble">
+            👋 Salom! Men Ustak AI yordamchiman.<br>
+            Nimadir buzilib qolgan bo'lsa — yozing yoki rasmini tashlang, birga ko'ramiz: ba'zida o'zingiz tuzata olasiz, ba'zida kerakli ustani taklif qilaman.
           </div>
-          <p class="photo-hint">Fon oq bo'lishi tavsiya etiladi</p>
-          <p class="photo-warning" id="photoWarning" hidden>⚠️ Fon och emasga o'xshaydi. Baribir davom etamizmi?</p>
         </div>
-
-        <label class="field">
-          <span class="field-label">To'liq ism</span>
-          <input type="text" name="full_name" id="f_full_name" required maxlength="80" placeholder="Aliyev Vali">
-        </label>
-
-        <div class="field-row">
-          <label class="field">
-            <span class="field-label">Yosh</span>
-            <input type="number" name="age" id="f_age" required min="16" max="90" placeholder="30">
-          </label>
-          <label class="field">
-            <span class="field-label">Tajriba (yil)</span>
-            <input type="number" name="experience_years" id="f_experience" required min="0" max="70" placeholder="5">
-          </label>
-        </div>
-
-        <label class="field">
-          <span class="field-label">Soha</span>
-          <select name="specialty" id="f_specialty" class="select-field" required>
-            <option value="" disabled selected>Tanlang...</option>
-          </select>
-        </label>
-
-        <label class="field">
-          <span class="field-label">Hudud</span>
-          <select name="city" id="f_city" class="select-field" required>
-            <option value="" disabled selected>Tanlang...</option>
-          </select>
-        </label>
-
-        <label class="field">
-          <span class="field-label">Telefon raqami</span>
-          <input type="tel" name="phone" id="f_phone" required placeholder="+998 90 123 45 67">
-        </label>
-
-        <label class="field">
-          <span class="field-label">Narx (ixtiyoriy)</span>
-          <input type="text" name="price_info" id="f_price" maxlength="60" placeholder="Masalan: 100 000 so'mdan">
-        </label>
-
-        <label class="field">
-          <span class="field-label">Qisqacha ma'lumot (ixtiyoriy)</span>
-          <textarea name="bio" id="f_bio" maxlength="200" rows="3" placeholder="O'zingiz haqingizda qisqacha..."></textarea>
-          <span class="char-counter" id="bioCounter">0/200</span>
-        </label>
-
-        <button type="submit" class="btn-primary btn-stamp-target" id="registerSubmit">
-          <span class="btn-label">✅ Ro'yxatdan o'tish</span>
-        </button>
-
-      </form>
+      </div>
+      <div class="ai-image-preview" id="aiImagePreview" hidden>
+        <img id="aiImagePreviewImg" alt="rasm">
+        <button type="button" id="aiImageRemove">✕</button>
+      </div>
+      <div class="ai-input-row">
+        <input type="file" id="aiImageInput" accept="image/jpeg,image/png,image/webp" hidden>
+        <button type="button" class="ai-attach-btn" id="aiAttachBtn">📷</button>
+        <input type="text" id="aiTextInput" placeholder="Muammoingizni yozing..." autocomplete="off">
+        <button type="button" class="ai-send-btn" id="aiSendBtn">➤</button>
+      </div>
     </div>
+  </section>
 
+  <!-- ===== TAB: Pro ===== -->
+  <section class="tab-panel" id="tab-pro">
+    <div class="pro-card">
+      <div class="pro-icon">💎</div>
+      <h2>Ustak Pro</h2>
+      <p class="pro-sub">Tez orada — e'loningizni birinchi o'ringa chiqarish, ko'proq mijoz va boshqa imkoniyatlar.</p>
+      <span class="pro-badge">Tez orada</span>
+    </div>
   </section>
 
   <!-- ===== TAB: Profil ===== -->
   <section class="tab-panel" id="tab-profile">
+
+    <div class="profile-card" id="profileCard">
+      <div class="profile-avatar">👤</div>
+      <div class="profile-info">
+        <p class="profile-name" id="profileName">—</p>
+        <p class="profile-phone" id="profilePhone">—</p>
+      </div>
+    </div>
+
+    <button type="button" class="btn-primary btn-become-master" id="becomeMasterBtn">
+      🧰 Usta bo'lish
+    </button>
 
     <div class="profile-section">
       <h2 class="section-title">📋 Kutilayotgan chaqiruvlar</h2>
@@ -156,11 +126,103 @@
       <div class="my-masters-list" id="myMastersList"></div>
       <div class="empty-state small" id="myMastersEmpty" hidden>
         <div class="empty-icon">🗂️</div>
-        <p class="empty-title">Siz hali ro'yxatdan o'tmagansiz</p>
+        <p class="empty-title">Siz hali usta sifatida ro'yxatdan o'tmagansiz</p>
       </div>
     </div>
 
   </section>
+
+  <!-- ===== MODAL: Usta bo'lish (ro'yxatdan o'tish) ===== -->
+  <div class="modal-overlay" id="registerModal" hidden>
+    <div class="modal-card modal-card-scroll">
+      <button type="button" class="modal-close" id="registerModalClose">✕</button>
+      <div class="form-card">
+        <div class="form-card-header">
+          <span class="form-card-tag">YANGI TEG</span>
+          <h2>Usta sifatida ro'yxatdan o'ting</h2>
+          <p class="form-card-hint">Ma'lumotlaringiz mijozlarga darhol ko'rinadi</p>
+        </div>
+
+        <form id="registerForm" class="tag-form" novalidate>
+
+          <div class="photo-upload" id="photoUpload">
+            <input type="file" id="photoInput" accept="image/jpeg,image/png,image/webp" hidden>
+            <div class="photo-preview" id="photoPreview">
+              <span class="photo-placeholder-icon">📷</span>
+              <span class="photo-placeholder-text">Rasm yuklash</span>
+            </div>
+            <p class="photo-hint">Fon oq bo'lishi tavsiya etiladi</p>
+            <p class="photo-warning" id="photoWarning" hidden>⚠️ Fon och emasga o'xshaydi. Baribir davom etamizmi?</p>
+          </div>
+
+          <label class="field">
+            <span class="field-label">To'liq ism</span>
+            <input type="text" name="full_name" id="f_full_name" required maxlength="80" placeholder="Aliyev Vali">
+          </label>
+
+          <div class="field-row">
+            <label class="field">
+              <span class="field-label">Yosh</span>
+              <input type="number" name="age" id="f_age" required min="16" max="90" placeholder="30">
+            </label>
+            <label class="field">
+              <span class="field-label">Tajriba (yil)</span>
+              <input type="number" name="experience_years" id="f_experience" required min="0" max="70" placeholder="5">
+            </label>
+          </div>
+
+          <label class="field">
+            <span class="field-label">Soha</span>
+            <select name="specialty" id="f_specialty" class="select-field" required>
+              <option value="" disabled selected>Tanlang...</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span class="field-label">Hudud</span>
+            <select name="city" id="f_city" class="select-field" required>
+              <option value="" disabled selected>Tanlang...</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span class="field-label">Telefon raqami</span>
+            <input type="tel" name="phone" id="f_phone" required placeholder="+998 90 123 45 67">
+          </label>
+
+          <label class="field">
+            <span class="field-label">Narx (ixtiyoriy)</span>
+            <input type="text" name="price_info" id="f_price" maxlength="60" placeholder="Masalan: 100 000 so'mdan">
+          </label>
+
+          <label class="field">
+            <span class="field-label">Qisqacha ma'lumot (ixtiyoriy)</span>
+            <textarea name="bio" id="f_bio" maxlength="200" rows="3" placeholder="O'zingiz haqingizda qisqacha..."></textarea>
+            <span class="char-counter" id="bioCounter">0/200</span>
+          </label>
+
+          <button type="submit" class="btn-primary btn-stamp-target" id="registerSubmit">
+            <span class="btn-label">✅ Ro'yxatdan o'tish</span>
+          </button>
+
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== MODAL: Chaqirish (manzil kiritish) ===== -->
+  <div class="modal-overlay" id="locationModal" hidden>
+    <div class="modal-card">
+      <span class="modal-tag">CHAQIRISH</span>
+      <h2>Manzilingizni kiriting</h2>
+      <p class="modal-sub">Usta shu manzil bo'yicha siz bilan bog'lanadi</p>
+      <textarea id="locationInput" maxlength="300" rows="3" placeholder="Masalan: Qarshi shahar, Mustaqillik ko'chasi 12-uy"></textarea>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="locationCancel">Bekor qilish</button>
+        <button class="btn-primary btn-stamp-target" id="locationSubmit">Chaqirish</button>
+      </div>
+    </div>
+  </div>
 
   <!-- ===== TAB: Baholash (deep-link orqali ochiladi) ===== -->
   <div class="modal-overlay" id="rateModal" hidden>

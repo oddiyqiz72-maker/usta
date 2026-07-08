@@ -22,7 +22,8 @@ source venv/bin/activate       # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
 cp .env.example .env
-# .env faylida BOT_TOKEN va WEBAPP_URL ni to'ldiring
+# .env faylida BOT_TOKEN, WEBAPP_URL va (ixtiyoriy) GEMINI_API_KEY ni to'ldiring
+# Gemini API kaliti: https://aistudio.google.com/apikey (bepul reja bor)
 
 python run.py
 ```
@@ -41,7 +42,9 @@ manzilda `/` orqali xizmat qilinadi.
 2. **Web Service** yarating, build buyrug'i: `pip install -r requirements.txt`
 3. Start buyrug'i (`Procfile` orqali avtomatik): `python run.py`
 4. Environment Variables bo'limida `BOT_TOKEN` va `WEBAPP_URL` (Render
-   bergan public URL) ni kiriting.
+   bergan public URL) ni kiriting. AI yordamchi ishlashi uchun
+   `GEMINI_API_KEY` ni ham qo'shing (ixtiyoriy — bo'lmasa AI tabi xato
+   xabarini ko'rsatadi, boshqa hamma narsa ishlayveradi).
 5. Deploy tugagach, BotFather orqali botning **Menu Button** yoki
    `/setmenubutton` sozlamasida shu WEBAPP_URL'ni belgilang (ixtiyoriy —
    `/start` buyrug'i allaqachon WebApp tugmasini yuboradi).
@@ -68,11 +71,22 @@ usta-bot/
 
 ## Asosiy foydalanuvchi oqimlari
 
-1. **Usta ro'yxatdan o'tadi** — "Usta bo'lish" tabida forma to'ldiradi,
-   rasm yuklaydi (fon yorqinligi brauzerda taxminiy tekshiriladi).
-2. **Mijoz qidiradi va chaqiradi** — "Qidirish" tabida soha/hudud bo'yicha
-   filtrlaydi, "🔔 Chaqirish" tugmasini bosadi → usta botdan xabar oladi.
-3. **Usta chaqiruvni tugatadi** — "Profil" tabida "✅ Tugatdim" bosadi →
+1. **Botni ishga tushirish** — `/start` bosilganda kontaktni ulashish
+   majburiy (kontakt ulashilmaguncha boshqa hech narsa qilib bo'lmaydi).
+   Kontakt ulashilgach, bitta tugma chiqadi: **"🧰 Ustak'ni ochish"**.
+2. **Mini App 4 ta bo'limdan iborat** (pastki tab):
+   - **Ustalar** — soha/hudud bo'yicha qidirish, "🔔 Chaqirish" bosilsa
+     manzil so'raladi (avvalgi manzil eslab qolinadi va avtomatik
+     to'ldiriladi), so'ng usta botdan xabar oladi.
+   - **AI Yordamchi** — matn yoki rasm yuborilsa, Gemini API orqali
+     tahlil qiladi: oddiy muammoni o'zi tuzatishga yordam beradi yoki
+     tegishli soha ustasini tavsiya qilib, bitta tugma bilan o'sha
+     sohadagi ustalar ro'yxatiga o'tkazadi.
+   - **Pro** — hozircha "Tez orada" sahifasi.
+   - **Profil** — o'z ma'lumotlari (ism, telefon), kutilayotgan
+     chaqiruvlar, o'z e'lonlari va **"🧰 Usta bo'lish"** tugmasi (bosilsa
+     ro'yxatdan o'tish formasi modal oynada ochiladi).
+3. **Usta chaqiruvni tugatadi** — "Profil" bo'limida "✅ Tugatdim" bosadi →
    mijozga bot orqali baholash taklifi (deep-link) yuboriladi.
 4. **Mijoz baholaydi** — bot xabaridagi tugma orqali Mini App
    `?tab=rate&master_id=X` bilan ochiladi, yulduzcha + izoh bilan

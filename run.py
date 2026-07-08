@@ -11,6 +11,7 @@ load_dotenv()
 
 from bot import run_bot
 from backend.main import app
+from backend import database as db
 
 
 async def run_api() -> None:
@@ -21,6 +22,7 @@ async def run_api() -> None:
 
 
 async def main() -> None:
+    db.init_db()  # bot va API bir vaqtda ishga tushishidan oldin baza tayyor bo'lsin
     await asyncio.gather(run_bot(), run_api())
 
 

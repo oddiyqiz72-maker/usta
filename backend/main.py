@@ -27,6 +27,10 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 WEBAPP_URL = os.environ.get("WEBAPP_URL", "")
 TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_IMAGE_BYTES = 6 * 1024 * 1024  # 6MB
 
@@ -182,12 +186,18 @@ async def api_create_call(
     customer_telegram_id: int = Form(...),
     customer_username: str | None = Form(default=None),
     customer_name: str | None = Form(default=None),
+    location: str | None = Form(default=None),
 ):
     master = db.get_master(master_id)
     if not master:
         raise HTTPException(status_code=404, detail="Usta topilmadi")
 
-    call_id = db.insert_call(master_id, customer_telegram_id, customer_username, customer_name)
+    location = (location or "").strip() or None
+    call_id = db.insert_call(master_id, customer_telegram_id, customer_username, customer_name, location)
+
+    # Keyingi chaqiruvlar uchun joylashuvni eslab qolamiz (autofill)
+    if location:
+        db.upsert_customer(customer_telegram_id, customer_username, customer_name, location=location)
 
     customer_link = f"https://t.me/{customer_username}" if customer_username else None
     customer_display = customer_name or "Noma'lum"
@@ -197,6 +207,8 @@ async def api_create_call(
     ]
     if customer_link:
         text_lines.append(f"✈️ Telegram: {customer_link}")
+    if location:
+        text_lines.append(f"📍 Manzil: {location}")
     text_lines.append("\nMijoz siz bilan bog'lanishni kutmoqda. Ishni bajarib bo'lgach, \"Profil\" bo'limida \"Tugatdim\" tugmasini bosing.")
     await notify_telegram(master["telegram_id"], "\n".join(text_lines))
 
@@ -257,6 +269,144 @@ def api_rate_master(
 @app.get("/api/masters/{master_id}/rated/{customer_telegram_id}")
 def api_has_rated(master_id: int, customer_telegram_id: int):
     return {"rated": db.has_rated(master_id, customer_telegram_id)}
+
+
+# ------------------------------------------------------------- customers --
+
+@app.post("/api/customers/contact")
+def api_save_contact(
+    telegram_id: int = Form(...),
+    telegram_username: str | None = Form(default=None),
+    full_name: str | None = Form(default=None),
+    phone: str | None = Form(default=None),
+):
+    db.upsert_customer(telegram_id, telegram_username, full_name, phone)
+    return {"status": "ok"}
+
+
+@app.get("/api/customers/{telegram_id}")
+def api_get_customer(telegram_id: int):
+    row = db.get_customer(telegram_id)
+    if not row:
+        raise HTTPException(status_code=404, detail="Mijoz topilmadi")
+    return dict(row)
+
+
+@app.post("/api/customers/location")
+def api_save_location(
+    telegram_id: int = Form(...),
+    location: str = Form(...),
+):
+    db.upsert_customer(telegram_id, location=location.strip())
+    return {"status": "ok"}
+
+
+# --------------------------------------------------------- ai yordamchi --
+
+AI_SYSTEM_PROMPT = """Sen "Ustak" ilovasidagi AI yordamchisan. O'zbek tilida, iliq va tushunarli tilda javob ber.
+
+Vazifang:
+1. Foydalanuvchi biror narsa buzilgani haqida yozsa yoki rasm tashlasa (masalan santexnika, elektr, mebel, texnika muammosi) — avval nima bo'lganini qisqa aniqla.
+2. Agar bu foydalanuvchi o'zi (usta chaqirmasdan) tuzata oladigan oddiy muammo bo'lsa — qisqa, aniq, xavfsiz qadamlar bilan qanday tuzatishni tushuntir.
+3. Agar muammo jiddiy bo'lsa yoki maxsus asbob/tajriba talab qilsa — buni ayt va qaysi sohadagi ustani chaqirish kerakligini aniq tavsiya qil. Faqat quyidagi sohalardan birini tanla: {specialties}.
+4. Javobing oxirida, agar usta chaqirish tavsiya qilinsa, alohida qatorda aniq shu formatda yoz: SPECIALTY: <soha_kaliti> (masalan: SPECIALTY: santexnik). Agar usta kerak bo'lmasa, bu qatorni yozma.
+5. Javoblaring qisqa, amaliy va samimiy bo'lsin. Xavfli ishlarda (gaz, yuqori kuchlanish) doim ehtiyot choralarini eslat.
+"""
+
+
+def _extract_specialty_tag(text: str) -> tuple[str, str | None]:
+    """Javobdan 'SPECIALTY: key' qatorini ajratib oladi va matndan olib tashlaydi."""
+    lines = text.splitlines()
+    specialty = None
+    kept = []
+    for line in lines:
+        stripped = line.strip()
+        if stripped.upper().startswith("SPECIALTY:"):
+            key = stripped.split(":", 1)[1].strip().lower()
+            if key in SPECIALTIES:
+                specialty = key
+            continue
+        kept.append(line)
+    return "\n".join(kept).strip(), specialty
+
+
+@app.post("/api/ai/chat")
+async def api_ai_chat(
+    message: str = Form(default=""),
+    history: str = Form(default="[]"),
+    image: UploadFile | None = File(default=None),
+):
+    if not GEMINI_API_KEY:
+        raise HTTPException(
+            status_code=503,
+            detail="AI yordamchi hozircha sozlanmagan (GEMINI_API_KEY yo'q). Administratorga murojaat qiling.",
+        )
+
+    import json as _json
+
+    try:
+        prior_turns = _json.loads(history) if history else []
+    except Exception:
+        prior_turns = []
+
+    specialties_str = ", ".join(SPECIALTIES.keys())
+    contents = []
+    for turn in prior_turns[-10:]:
+        role = "model" if turn.get("role") == "assistant" else "user"
+        text = (turn.get("content") or "").strip()
+        if text:
+            contents.append({"role": role, "parts": [{"text": text}]})
+
+    parts: list[dict] = []
+    if message.strip():
+        parts.append({"text": message.strip()})
+    if image is not None:
+        img_bytes = await image.read()
+        if len(img_bytes) > MAX_IMAGE_BYTES:
+            raise HTTPException(status_code=422, detail="Rasm hajmi juda katta")
+        import base64
+        parts.append({
+            "inline_data": {
+                "mime_type": image.content_type or "image/jpeg",
+                "data": base64.b64encode(img_bytes).decode("ascii"),
+            }
+        })
+    if not parts:
+        raise HTTPException(status_code=422, detail="Xabar yoki rasm yuboring")
+
+    contents.append({"role": "user", "parts": parts})
+
+    payload = {
+        "system_instruction": {
+            "parts": [{"text": AI_SYSTEM_PROMPT.format(specialties=specialties_str)}]
+        },
+        "contents": contents,
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(
+                GEMINI_URL, params={"key": GEMINI_API_KEY}, json=payload
+            )
+        data = resp.json()
+        if resp.status_code != 200:
+            err_msg = data.get("error", {}).get("message", "AI xatoligi")
+            raise HTTPException(status_code=502, detail=f"AI yordamchi xatosi: {err_msg}")
+        raw_text = (
+            data["candidates"][0]["content"]["parts"][0]["text"]
+        )
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(status_code=502, detail="AI yordamchiga ulanib bo'lmadi. Birozdan so'ng qayta urinib ko'ring.")
+
+    clean_text, specialty = _extract_specialty_tag(raw_text)
+    result = {"reply": clean_text}
+    if specialty:
+        name, emoji = SPECIALTIES[specialty]
+        result["suggested_specialty"] = specialty
+        result["suggested_specialty_label"] = f"{emoji} {name}"
+    return result
 
 
 # ------------------------------------------------------------ static app --

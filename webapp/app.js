@@ -24,6 +24,11 @@ let searchDebounce = null;
 let selectedStars = 0;
 let rateMasterId = null;
 let bgWarningAccepted = false;
+let pendingCallMasterId = null;
+let customerProfile = null;
+let aiHistory = [];
+let aiImageFile = null;
+let aiSending = false;
 
 // -------------------------------------------------------------- helpers --
 
@@ -97,6 +102,17 @@ tabButtons.forEach((btn) => {
     if (tabName === "profile") loadProfileTab();
   });
 });
+
+function goToMastersTab(specialtyKey) {
+  if (specialtyKey) {
+    activeSpecialty = specialtyKey;
+    document.querySelectorAll(".chip").forEach((c) => {
+      c.classList.toggle("active", c.dataset.key === specialtyKey);
+    });
+  }
+  setActiveTabVisual("masters");
+  loadMasters();
+}
 
 // ============================================================ reference ==
 
@@ -238,36 +254,70 @@ function attachCallHandlers() {
   });
 }
 
-async function handleCallMaster(btn) {
+function handleCallMaster(btn) {
   if (!CURRENT_TG_ID) {
     showToast("Telegram orqali ochilishi kerak", "error");
     return;
   }
-  const masterId = btn.dataset.masterId;
-  const label = btn.querySelector(".btn-label") || btn;
+  pendingCallMasterId = btn.dataset.masterId;
+  el("locationInput").value = customerProfile?.location || "";
+  el("locationModal").hidden = false;
+  el("locationInput").focus();
+}
 
-  btn.classList.add("pulsing");
-  btn.disabled = true;
+async function submitCallWithLocation() {
+  const masterId = pendingCallMasterId;
+  const location = el("locationInput").value.trim();
+  if (!location) {
+    showToast("Iltimos, manzilingizni kiriting", "error");
+    return;
+  }
+  const btn = document.querySelector(`.action-btn.call-master[data-master-id="${masterId}"]`);
+  const submitBtn = el("locationSubmit");
+  submitBtn.disabled = true;
 
   const formData = new FormData();
   formData.append("master_id", masterId);
   formData.append("customer_telegram_id", CURRENT_TG_ID);
   if (CURRENT_USERNAME) formData.append("customer_username", CURRENT_USERNAME);
   if (CURRENT_NAME) formData.append("customer_name", CURRENT_NAME);
+  formData.append("location", location);
 
   try {
     await apiFetch("/api/calls", { method: "POST", body: formData });
-    btn.classList.remove("pulsing");
-    btn.classList.add("stamped");
-    btn.innerHTML = `<span class="stamp-pop">✅ Chaqirildi!</span>`;
+    customerProfile = customerProfile || {};
+    customerProfile.location = location;
+    el("locationModal").hidden = true;
+    if (btn) {
+      btn.classList.add("stamped");
+      btn.disabled = true;
+      btn.innerHTML = `<span class="stamp-pop">✅ Chaqirildi!</span>`;
+    }
     if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
     showToast("Usta xabardor qilindi. Tez orada bog'lanadi!", "success");
   } catch (err) {
-    btn.classList.remove("pulsing");
-    btn.disabled = false;
     showToast(err.message, "error");
+  } finally {
+    submitBtn.disabled = false;
   }
 }
+
+el("locationCancel").addEventListener("click", () => {
+  el("locationModal").hidden = true;
+  pendingCallMasterId = null;
+});
+
+el("locationSubmit").addEventListener("click", submitCallWithLocation);
+
+// ========================================================== reg modal ==
+
+el("becomeMasterBtn").addEventListener("click", () => {
+  el("registerModal").hidden = false;
+});
+
+el("registerModalClose").addEventListener("click", () => {
+  el("registerModal").hidden = true;
+});
 
 // ======================================================== register form ==
 
@@ -392,8 +442,9 @@ el("registerForm").addEventListener("submit", async (e) => {
       submitBtn.classList.remove("success");
       submitBtn.querySelector(".btn-label").textContent = originalLabel;
       submitBtn.disabled = false;
-      setActiveTabVisual("search");
-      loadMasters();
+      el("registerModal").hidden = true;
+      loadMyMasters();
+      if (document.querySelector('.tab-panel#tab-masters.active')) loadMasters();
     }, 1400);
   } catch (err) {
     showToast(err.message, "error");
@@ -406,7 +457,17 @@ el("registerForm").addEventListener("submit", async (e) => {
 
 async function loadProfileTab() {
   if (!CURRENT_TG_ID) return;
-  await Promise.all([loadPendingCalls(), loadMyMasters()]);
+  await Promise.all([loadCustomerProfile(), loadPendingCalls(), loadMyMasters()]);
+}
+
+async function loadCustomerProfile() {
+  try {
+    customerProfile = await apiFetch(`/api/customers/${CURRENT_TG_ID}`);
+  } catch (_) {
+    customerProfile = null;
+  }
+  el("profileName").textContent = customerProfile?.full_name || CURRENT_NAME || "—";
+  el("profilePhone").textContent = customerProfile?.phone || "Telefon raqami yo'q";
 }
 
 async function loadPendingCalls() {
@@ -491,6 +552,107 @@ async function deleteMaster(masterId) {
   }
 }
 
+// ============================================================ ai chat ==
+
+function aiScrollToBottom() {
+  const box = el("aiMessages");
+  box.scrollTop = box.scrollHeight;
+}
+
+function renderAiMessage(role, html) {
+  const box = el("aiMessages");
+  const wrap = document.createElement("div");
+  wrap.className = `ai-msg ai-msg-${role === "user" ? "user" : "bot"}`;
+  wrap.innerHTML = `<div class="ai-msg-bubble">${html}</div>`;
+  box.appendChild(wrap);
+  aiScrollToBottom();
+  return wrap;
+}
+
+el("aiAttachBtn").addEventListener("click", () => el("aiImageInput").click());
+
+el("aiImageInput").addEventListener("change", () => {
+  const file = el("aiImageInput").files[0];
+  if (!file) return;
+  aiImageFile = file;
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    el("aiImagePreviewImg").src = e.target.result;
+    el("aiImagePreview").hidden = false;
+  };
+  reader.readAsDataURL(file);
+});
+
+el("aiImageRemove").addEventListener("click", () => {
+  aiImageFile = null;
+  el("aiImageInput").value = "";
+  el("aiImagePreview").hidden = true;
+});
+
+async function sendAiMessage() {
+  if (aiSending) return;
+  const input = el("aiTextInput");
+  const text = input.value.trim();
+  if (!text && !aiImageFile) return;
+
+  aiSending = true;
+  el("aiSendBtn").disabled = true;
+
+  let userHtml = escapeHtml(text);
+  if (aiImageFile) {
+    userHtml += `<br><img class="ai-msg-image" src="${el("aiImagePreviewImg").src}">`;
+  }
+  renderAiMessage("user", userHtml || "📷 rasm");
+
+  const loadingMsg = renderAiMessage("bot", `<span class="ai-typing">Yozmoqda...</span>`);
+
+  const formData = new FormData();
+  formData.append("message", text);
+  formData.append("history", JSON.stringify(aiHistory));
+  if (aiImageFile) formData.append("image", aiImageFile);
+
+  input.value = "";
+  const sentImageFile = aiImageFile;
+  aiImageFile = null;
+  el("aiImageInput").value = "";
+  el("aiImagePreview").hidden = true;
+
+  try {
+    const result = await apiFetch("/api/ai/chat", { method: "POST", body: formData });
+    loadingMsg.remove();
+
+    let replyHtml = escapeHtml(result.reply).replace(/\n/g, "<br>");
+    const botMsgEl = renderAiMessage("bot", replyHtml);
+
+    aiHistory.push({ role: "user", content: text || "(rasm yubordi)" });
+    aiHistory.push({ role: "assistant", content: result.reply });
+
+    if (result.suggested_specialty) {
+      const btnWrap = document.createElement("div");
+      btnWrap.className = "ai-suggest-btn-wrap";
+      btnWrap.innerHTML = `<button class="ai-suggest-btn" data-key="${result.suggested_specialty}">🔍 ${escapeHtml(result.suggested_specialty_label)} ustalarini ko'rish</button>`;
+      botMsgEl.appendChild(btnWrap);
+      btnWrap.querySelector(".ai-suggest-btn").addEventListener("click", () => {
+        goToMastersTab(result.suggested_specialty);
+      });
+    }
+  } catch (err) {
+    loadingMsg.remove();
+    renderAiMessage("bot", `⚠️ ${escapeHtml(err.message)}`);
+  } finally {
+    aiSending = false;
+    el("aiSendBtn").disabled = false;
+  }
+}
+
+el("aiSendBtn").addEventListener("click", sendAiMessage);
+el("aiTextInput").addEventListener("keydown", (e) => {
+  if (e.key === "Enter") {
+    e.preventDefault();
+    sendAiMessage();
+  }
+});
+
 // ============================================================= rating ==
 
 function openRateModal(masterId) {
@@ -555,20 +717,28 @@ el("rateSubmit").addEventListener("click", async () => {
 
 function handleDeepLink() {
   const params = new URLSearchParams(window.location.search);
-  const tab = params.get("tab");
+  let tab = params.get("tab");
   const masterId = params.get("master_id");
   if (tab === "rate" && masterId) {
     openRateModal(masterId);
     return;
   }
-  if (tab === "search" || tab === "register" || tab === "profile") {
+  // eski deep-linklar bilan moslik
+  if (tab === "search") tab = "masters";
+  if (tab === "register") {
+    setActiveTabVisual("profile");
+    loadProfileTab();
+    el("registerModal").hidden = false;
+    return;
+  }
+  if (tab === "masters" || tab === "ai" || tab === "pro" || tab === "profile") {
     setActiveTabVisual(tab);
     if (tab === "profile") loadProfileTab();
   }
 }
 
 async function init() {
-  setActiveTabVisual("search", false);
+  setActiveTabVisual("masters", false);
   await loadReferenceData();
   await loadMasters();
   handleDeepLink();
