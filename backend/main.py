@@ -190,9 +190,10 @@ async def api_create_call(
     call_id = db.insert_call(master_id, customer_telegram_id, customer_username, customer_name)
 
     customer_link = f"https://t.me/{customer_username}" if customer_username else None
+    customer_display = customer_name or "Noma'lum"
     text_lines = [
         "🔔 <b>Yangi chaqiruv!</b>",
-        f"👤 Mijoz: {customer_name or 'Noma\'lum'}",
+        f"👤 Mijoz: {customer_display}",
     ]
     if customer_link:
         text_lines.append(f"✈️ Telegram: {customer_link}")
