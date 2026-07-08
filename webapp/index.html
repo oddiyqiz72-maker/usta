@@ -1,194 +1,192 @@
 <!DOCTYPE html>
 <html lang="uz">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
-<title>Ustalar — mahalliy ustalarni topish</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="/style.css" />
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Ustak — Ustangizni toping</title>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/style.css">
 </head>
 <body>
 
 <div class="app">
 
-  <!-- HEADER -->
-  <header class="topbar">
-    <div class="topbar__badge">
-      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M14.7 6.3a1 1 0 000 1.4l1.6 1.6a1 1 0 001.4 0l3.77-3.77a6 6 0 01-7.94 7.94l-6.91 6.91a2.12 2.12 0 01-3-3l6.91-6.91a6 6 0 017.94-7.94l-3.76 3.76z"/>
-      </svg>
+  <!-- ===== Header ===== -->
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark">🛠️</span>
+      <div class="brand-text">
+        <h1 class="brand-title">USTAK</h1>
+        <p class="brand-sub">ustangizni toping</p>
+      </div>
     </div>
-    <div class="topbar__title">
-      <span class="topbar__eyebrow">MAHALLIY</span>
-      <h1>USTAK</h1>
-    </div>
-    <button class="theme-toggle" id="themeToggle" title="Rejimni almashtirish" type="button">🌙</button>
   </header>
 
-  <!-- TABS CONTENT -->
-  <main class="screen" id="screen-search">
-    <section class="panel">
-      <div class="search-row">
-        <input id="searchInput" class="input input--search" type="text" placeholder="Ism bo'yicha qidirish…" />
-      </div>
+  <!-- ===== Tabs ===== -->
+  <nav class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="search">Qidirish</button>
+    <button class="tab-btn" data-tab="register">Usta bo'lish</button>
+    <button class="tab-btn" data-tab="profile">Profil</button>
+    <span class="tab-indicator" id="tabIndicator"></span>
+  </nav>
 
-      <div class="chips" id="specialtyChips"></div>
+  <!-- ===== TAB: Qidirish ===== -->
+  <section class="tab-panel active" id="tab-search">
 
-      <select id="cityFilter" class="input input--select">
+    <div class="search-bar">
+      <span class="search-icon">🔎</span>
+      <input type="text" id="searchInput" placeholder="Usta ismini qidiring..." autocomplete="off">
+    </div>
+
+    <div class="filter-row">
+      <select id="cityFilter" class="select-field">
         <option value="">Barcha hududlar</option>
       </select>
+    </div>
 
-      <div class="results" id="results">
-        <div class="empty-state" id="emptyState">
-          <div class="empty-state__icon">🔎</div>
-          <p>Hozircha hech kim topilmadi.<br/>Filtrni o'zgartirib ko'ring.</p>
+    <div class="chip-row" id="specialtyChips">
+      <!-- JS orqali to'ldiriladi -->
+    </div>
+
+    <div class="master-list" id="masterList">
+      <!-- skeleton / kartochkalar JS orqali -->
+    </div>
+
+    <div class="empty-state" id="emptyState" hidden>
+      <div class="empty-icon">🧰</div>
+      <p class="empty-title">Hech narsa topilmadi</p>
+      <p class="empty-sub">Boshqa soha yoki hudud bilan urinib ko'ring</p>
+    </div>
+
+  </section>
+
+  <!-- ===== TAB: Ro'yxatdan o'tish ===== -->
+  <section class="tab-panel" id="tab-register">
+
+    <div class="form-card">
+      <div class="form-card-header">
+        <span class="form-card-tag">YANGI TEG</span>
+        <h2>Usta sifatida ro'yxatdan o'ting</h2>
+        <p class="form-card-hint">Ma'lumotlaringiz mijozlarga darhol ko'rinadi</p>
+      </div>
+
+      <form id="registerForm" class="tag-form" novalidate>
+
+        <div class="photo-upload" id="photoUpload">
+          <input type="file" id="photoInput" accept="image/jpeg,image/png,image/webp" hidden>
+          <div class="photo-preview" id="photoPreview">
+            <span class="photo-placeholder-icon">📷</span>
+            <span class="photo-placeholder-text">Rasm yuklash</span>
+          </div>
+          <p class="photo-hint">Fon oq bo'lishi tavsiya etiladi</p>
+          <p class="photo-warning" id="photoWarning" hidden>⚠️ Fon och emasga o'xshaydi. Baribir davom etamizmi?</p>
         </div>
-      </div>
-    </section>
-  </main>
-
-  <main class="screen screen--hidden" id="screen-register">
-    <section class="panel">
-
-      <div id="regSuccess" class="success-box success-box--hidden">
-        <div class="success-box__icon">✅</div>
-        <h3>E'lon joylandi!</h3>
-        <p>Sizning profilingiz endi qidiruvda ko'rinadi.</p>
-        <button class="btn btn--ghost" id="backToFormBtn">Yana usta qo'shish</button>
-      </div>
-
-      <form id="regForm" class="form">
-        <h2 class="form__title">Usta sifatida ro'yxatdan o'tish</h2>
-        <p class="form__hint">Ma'lumotlaringiz mijozlarga ko'rinadi. Barcha maydonlarni to'g'ri to'ldiring.</p>
 
         <label class="field">
-          <span class="field__label">To'liq ism</span>
-          <input required name="full_name" class="input" type="text" placeholder="Masalan: Aliyev Vali" maxlength="60" />
+          <span class="field-label">To'liq ism</span>
+          <input type="text" name="full_name" id="f_full_name" required maxlength="80" placeholder="Aliyev Vali">
         </label>
 
         <div class="field-row">
           <label class="field">
-            <span class="field__label">Yoshi</span>
-            <input required name="age" class="input" type="number" min="16" max="90" placeholder="32" />
+            <span class="field-label">Yosh</span>
+            <input type="number" name="age" id="f_age" required min="16" max="90" placeholder="30">
           </label>
           <label class="field">
-            <span class="field__label">Tajribasi (yil)</span>
-            <input required name="experience_years" class="input" type="number" min="0" max="70" placeholder="7" />
+            <span class="field-label">Tajriba (yil)</span>
+            <input type="number" name="experience_years" id="f_experience" required min="0" max="70" placeholder="5">
           </label>
         </div>
 
         <label class="field">
-          <span class="field__label">Soha</span>
-          <select required name="specialty" class="input input--select" id="specialtySelect"></select>
+          <span class="field-label">Soha</span>
+          <select name="specialty" id="f_specialty" class="select-field" required>
+            <option value="" disabled selected>Tanlang...</option>
+          </select>
         </label>
 
         <label class="field">
-          <span class="field__label">Hudud</span>
-          <select required name="city" class="input input--select" id="citySelect"></select>
+          <span class="field-label">Hudud</span>
+          <select name="city" id="f_city" class="select-field" required>
+            <option value="" disabled selected>Tanlang...</option>
+          </select>
         </label>
 
         <label class="field">
-          <span class="field__label">Telefon raqami</span>
-          <input required name="phone" class="input" type="tel" placeholder="+998 90 123 45 67" />
+          <span class="field-label">Telefon raqami</span>
+          <input type="tel" name="phone" id="f_phone" required placeholder="+998 90 123 45 67">
         </label>
 
         <label class="field">
-          <span class="field__label">Narx (ixtiyoriy)</span>
-          <input name="price_info" class="input" type="text" placeholder="Masalan: kelishilgan holda / 100 000 so'mdan" maxlength="60" />
+          <span class="field-label">Narx (ixtiyoriy)</span>
+          <input type="text" name="price_info" id="f_price" maxlength="60" placeholder="Masalan: 100 000 so'mdan">
         </label>
 
         <label class="field">
-          <span class="field__label">Qisqa ma'lumot (ixtiyoriy)</span>
-          <textarea name="bio" class="input input--textarea" maxlength="200" placeholder="Masalan: 10 yildan beri kvartira remonti bilan shug'ullanaman."></textarea>
+          <span class="field-label">Qisqacha ma'lumot (ixtiyoriy)</span>
+          <textarea name="bio" id="f_bio" maxlength="200" rows="3" placeholder="O'zingiz haqingizda qisqacha..."></textarea>
+          <span class="char-counter" id="bioCounter">0/200</span>
         </label>
 
-        <label class="field">
-          <span class="field__label">Rasmingiz <em>(oq/och fonda, aniq ko'rinadigan)</em></span>
-          <div class="photo-drop" id="photoDrop">
-            <img id="photoPreview" class="photo-drop__preview photo-drop__preview--hidden" />
-            <div class="photo-drop__placeholder" id="photoPlaceholder">
-              <span class="photo-drop__icon">📷</span>
-              <span>Rasm yuklash uchun bosing</span>
-            </div>
-            <input required id="photoInput" name="photo" type="file" accept="image/*" class="photo-drop__input" />
-          </div>
-          <div class="photo-warning photo-warning--hidden" id="photoWarning">
-            ⚠️ Rasm foni oq/och rangda emasga o'xshaydi. Iltimos, tekis oq fonda tushirilgan rasm yuklang — bu mijozlar ishonchini oshiradi.
-            <label class="photo-warning__override">
-              <input type="checkbox" id="photoOverride" />
-              Baribir shu rasmni yuborish
-            </label>
-          </div>
-        </label>
+        <button type="submit" class="btn-primary btn-stamp-target" id="registerSubmit">
+          <span class="btn-label">✅ Ro'yxatdan o'tish</span>
+        </button>
 
-        <div class="form__error" id="formError"></div>
-
-        <button type="submit" class="btn btn--primary" id="submitBtn">E'lonni joylash</button>
       </form>
+    </div>
 
-      <div class="my-listings" id="myListings"></div>
-    </section>
-  </main>
+  </section>
 
-  <main class="screen screen--hidden" id="screen-profile">
-    <section class="panel">
-      <h2 class="form__title">👤 Profil</h2>
-      <p class="form__hint">Sizga kelgan chaqiruvlar va e'lonlaringiz shu yerda.</p>
+  <!-- ===== TAB: Profil ===== -->
+  <section class="tab-panel" id="tab-profile">
 
-      <p class="my-listings__title" style="margin-top:8px;">Kutilayotgan chaqiruvlar</p>
-      <div class="calls-list" id="profileCalls"></div>
-
-      <p class="my-listings__title" style="margin-top:22px;">Mening e'lonlarim</p>
-      <div class="my-listings" id="profileListings"></div>
-    </section>
-  </main>
-
-  <!-- RATING MODAL -->
-  <div class="modal modal--hidden" id="rateModal">
-    <div class="modal__backdrop" id="rateModalBackdrop"></div>
-    <div class="modal__sheet">
-      <h3 class="modal__title">⭐ Ustani baholang</h3>
-      <p class="modal__master" id="rateModalMaster"></p>
-
-      <div class="star-picker" id="starPicker">
-        <button type="button" class="star-picker__star" data-star="1">★</button>
-        <button type="button" class="star-picker__star" data-star="2">★</button>
-        <button type="button" class="star-picker__star" data-star="3">★</button>
-        <button type="button" class="star-picker__star" data-star="4">★</button>
-        <button type="button" class="star-picker__star" data-star="5">★</button>
+    <div class="profile-section">
+      <h2 class="section-title">📋 Kutilayotgan chaqiruvlar</h2>
+      <div class="calls-list" id="callsList"></div>
+      <div class="empty-state small" id="callsEmpty" hidden>
+        <div class="empty-icon">📭</div>
+        <p class="empty-title">Hozircha chaqiruvlar yo'q</p>
       </div>
+    </div>
 
-      <label class="field">
-        <span class="field__label">Izoh (ixtiyoriy)</span>
-        <textarea id="rateComment" class="input input--textarea" maxlength="200" placeholder="Xizmat qanday bo'ldi?"></textarea>
-      </label>
+    <div class="profile-section">
+      <h2 class="section-title">🏷️ Mening e'lonlarim</h2>
+      <div class="my-masters-list" id="myMastersList"></div>
+      <div class="empty-state small" id="myMastersEmpty" hidden>
+        <div class="empty-icon">🗂️</div>
+        <p class="empty-title">Siz hali ro'yxatdan o'tmagansiz</p>
+      </div>
+    </div>
 
-      <div class="form__error" id="rateModalError"></div>
+  </section>
 
-      <button type="button" class="btn btn--primary" id="rateSubmitBtn">Baholashni yuborish</button>
-      <button type="button" class="btn btn--text" id="rateCancelBtn">Bekor qilish</button>
+  <!-- ===== TAB: Baholash (deep-link orqali ochiladi) ===== -->
+  <div class="modal-overlay" id="rateModal" hidden>
+    <div class="modal-card">
+      <span class="modal-tag">TEGNI YOPING</span>
+      <h2 id="rateModalTitle">Ustani baholang</h2>
+      <p class="modal-sub">Xizmat sifatini qanday baholaysiz?</p>
+      <div class="star-row" id="starRow">
+        <span class="star" data-value="1">★</span>
+        <span class="star" data-value="2">★</span>
+        <span class="star" data-value="3">★</span>
+        <span class="star" data-value="4">★</span>
+        <span class="star" data-value="5">★</span>
+      </div>
+      <textarea id="rateComment" maxlength="200" rows="3" placeholder="Izoh qoldiring (ixtiyoriy)"></textarea>
+      <div class="modal-actions">
+        <button class="btn-ghost" id="rateSkip">Bekor qilish</button>
+        <button class="btn-primary btn-stamp-target" id="rateSubmit">Yuborish</button>
+      </div>
     </div>
   </div>
 
-  <!-- BOTTOM NAV -->
-  <nav class="tabbar">
-    <button class="tabbar__item is-active" data-tab="search">
-      <span class="tabbar__icon">🔍</span>
-      <span>Qidirish</span>
-    </button>
-    <button class="tabbar__item" data-tab="register">
-      <span class="tabbar__icon">🧰</span>
-      <span>Usta bo'lish</span>
-    </button>
-    <button class="tabbar__item" data-tab="profile">
-      <span class="tabbar__icon">👤</span>
-      <span>Profil</span>
-    </button>
-  </nav>
-
 </div>
+
+<!-- Toast konteyner -->
+<div class="toast-container" id="toastContainer"></div>
 
 <script src="/app.js"></script>
 </body>

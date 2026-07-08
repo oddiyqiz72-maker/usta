@@ -1,21 +1,24 @@
-# Usta sohalari (kod -> ko'rinadigan nom + emoji)
-SPECIALTIES = [
-    {"code": "santexnik", "label": "Santexnik", "emoji": "🔧"},
-    {"code": "elektrik", "label": "Elektrik", "emoji": "⚡"},
-    {"code": "payvandchi", "label": "Payvandchi", "emoji": "🔗"},
-    {"code": "boyoqchi", "label": "Bo'yoqchi", "emoji": "🎨"},
-    {"code": "duradgor", "label": "Duradgor (yog'och usta)", "emoji": "🪚"},
-    {"code": "qurilishchi", "label": "Qurilishchi / Betonchi", "emoji": "🧱"},
-    {"code": "kafelchi", "label": "Kafelchi", "emoji": "🀄"},
-    {"code": "konditsioner", "label": "Konditsioner / Muzlatgich ustasi", "emoji": "🧊"},
-    {"code": "mebel", "label": "Mebel yig'uvchi", "emoji": "🛋️"},
-    {"code": "kompyuter", "label": "Kompyuter / Telefon ustasi", "emoji": "💻"},
-    {"code": "avtomexanik", "label": "Avtomexanik", "emoji": "🚗"},
-    {"code": "gazchi", "label": "Gaz-plita ustasi", "emoji": "🔥"},
-    {"code": "boshqa", "label": "Boshqa", "emoji": "🧰"},
-]
+# -*- coding: utf-8 -*-
+"""Ustak — doimiy ro'yxatlar: sohalar va hududlar."""
 
-# Hududlar
+# key -> (nomi, emoji)  — eski (real ishlab turgan) loyihadagi ro'yxat bilan bir xil
+SPECIALTIES = {
+    "santexnik": ("Santexnik", "🔧"),
+    "elektrik": ("Elektrik", "⚡"),
+    "payvandchi": ("Payvandchi", "🔗"),
+    "boyoqchi": ("Bo'yoqchi", "🎨"),
+    "duradgor": ("Duradgor (yog'och usta)", "🪚"),
+    "qurilishchi": ("Qurilishchi / Betonchi", "🧱"),
+    "kafelchi": ("Kafelchi", "🀄"),
+    "konditsioner": ("Konditsioner / Muzlatgich ustasi", "🧊"),
+    "mebel": ("Mebel yig'uvchi", "🛋️"),
+    "kompyuter": ("Kompyuter / Telefon ustasi", "💻"),
+    "avtomexanik": ("Avtomexanik", "🚗"),
+    "gazchi": ("Gaz-plita ustasi", "🔥"),
+    "boshqa": ("Boshqa", "🧰"),
+}
+
+# Eski (real) loyihadagi hudud ro'yxati bilan bir xil
 CITIES = [
     "Toshkent shahri",
     "Toshkent viloyati",
@@ -33,4 +36,10 @@ CITIES = [
     "Qoraqalpog'iston",
 ]
 
-SPECIALTY_MAP = {s["code"]: s for s in SPECIALTIES}
+
+def specialty_label(key: str) -> str:
+    item = SPECIALTIES.get(key)
+    if not item:
+        return key
+    name, emoji = item
+    return f"{emoji} {name}"

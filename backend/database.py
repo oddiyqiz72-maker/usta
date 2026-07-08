@@ -1,29 +1,47 @@
+# -*- coding: utf-8 -*-
+"""Ustak — SQLite ma'lumotlar bazasi qatlami.
+
+ORM ishlatilmagan — xom SQL. Bitta jarayonda bot va API bir vaqtda
+yozishi mumkinligi uchun thread-safe lock qo'llanadi.
 """
-Ustalar bazasi bilan ishlash uchun oddiy SQLite qatlami.
-Thread-safe qilish uchun lock ishlatiladi (SQLite bitta faylga yozish uchun).
-"""
+
 import sqlite3
 import threading
-import os
+import uuid
 from datetime import datetime, timezone
+from pathlib import Path
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "ustalar.db")
+DB_PATH = Path(__file__).resolve().parent / "ustalar.db"
+
 _lock = threading.Lock()
+_local = threading.local()
 
 
-def get_connection():
-    conn = sqlite3.connect(DB_PATH, check_same_thread=False)
-    conn.row_factory = sqlite3.Row
-    return conn
+def _get_conn() -> sqlite3.Connection:
+    if not hasattr(_local, "conn"):
+        conn = sqlite3.connect(DB_PATH, check_same_thread=False)
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        _local.conn = conn
+    return _local.conn
 
 
-def init_db():
+def now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def new_id() -> str:
+    return uuid.uuid4().hex
+
+
+def init_db() -> None:
     with _lock:
-        conn = get_connection()
-        conn.execute("""
+        conn = _get_conn()
+        conn.executescript(
+            """
             CREATE TABLE IF NOT EXISTS masters (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                telegram_id INTEGER,
+                telegram_id INTEGER NOT NULL,
                 telegram_username TEXT,
                 full_name TEXT NOT NULL,
                 age INTEGER NOT NULL,
@@ -35,21 +53,9 @@ def init_db():
                 bio TEXT,
                 photo_path TEXT,
                 created_at TEXT NOT NULL,
-                is_active INTEGER DEFAULT 1
-            )
-        """)
-        conn.execute("""
-            CREATE TABLE IF NOT EXISTS ratings (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                master_id INTEGER NOT NULL,
-                customer_telegram_id INTEGER NOT NULL,
-                stars INTEGER NOT NULL,
-                comment TEXT,
-                created_at TEXT NOT NULL,
-                UNIQUE(master_id, customer_telegram_id)
-            )
-        """)
-        conn.execute("""
+                is_active INTEGER NOT NULL DEFAULT 1
+            );
+
             CREATE TABLE IF NOT EXISTS calls (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 master_id INTEGER NOT NULL,
@@ -58,198 +64,199 @@ def init_db():
                 customer_name TEXT,
                 status TEXT NOT NULL DEFAULT 'pending',
                 created_at TEXT NOT NULL,
-                finished_at TEXT
-            )
-        """)
-        conn.commit()
-        conn.close()
+                finished_at TEXT,
+                FOREIGN KEY (master_id) REFERENCES masters (id)
+            );
 
+            CREATE TABLE IF NOT EXISTS ratings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                master_id INTEGER NOT NULL,
+                customer_telegram_id INTEGER NOT NULL,
+                stars INTEGER NOT NULL,
+                comment TEXT,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY (master_id) REFERENCES masters (id),
+                UNIQUE (master_id, customer_telegram_id)
+            );
 
-def add_master(data: dict) -> int:
-    with _lock:
-        conn = get_connection()
-        cur = conn.execute("""
-            INSERT INTO masters
-            (telegram_id, telegram_username, full_name, age, experience_years,
-             specialty, city, phone, price_info, bio, photo_path, created_at, is_active)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
-        """, (
-            data.get("telegram_id"),
-            data.get("telegram_username"),
-            data["full_name"],
-            data["age"],
-            data["experience_years"],
-            data["specialty"],
-            data["city"],
-            data["phone"],
-            data.get("price_info"),
-            data.get("bio"),
-            data.get("photo_path"),
-            datetime.now(timezone.utc).isoformat(),
-        ))
-        conn.commit()
-        new_id = cur.lastrowid
-        conn.close()
-        return new_id
-
-
-RATING_JOIN_SQL = """
-    LEFT JOIN (
-        SELECT master_id, AVG(stars) AS avg_rating, COUNT(*) AS ratings_count
-        FROM ratings GROUP BY master_id
-    ) r ON r.master_id = m.id
-"""
-
-
-def _attach_rating_defaults(row: dict) -> dict:
-    row["avg_rating"] = round(row["avg_rating"], 1) if row.get("avg_rating") is not None else None
-    row["ratings_count"] = row.get("ratings_count") or 0
-    return row
-
-
-def list_masters(specialty: str = None, city: str = None, search: str = None):
-    with _lock:
-        conn = get_connection()
-        query = f"SELECT m.*, r.avg_rating, r.ratings_count FROM masters m {RATING_JOIN_SQL} WHERE m.is_active = 1"
-        params = []
-        if specialty:
-            query += " AND m.specialty = ?"
-            params.append(specialty)
-        if city:
-            query += " AND m.city = ?"
-            params.append(city)
-        if search:
-            query += " AND m.full_name LIKE ?"
-            params.append(f"%{search}%")
-        query += " ORDER BY r.avg_rating DESC, m.experience_years DESC, m.created_at DESC"
-        rows = conn.execute(query, params).fetchall()
-        conn.close()
-        return [_attach_rating_defaults(dict(r)) for r in rows]
-
-
-def get_master(master_id: int):
-    with _lock:
-        conn = get_connection()
-        row = conn.execute(
-            f"SELECT m.*, r.avg_rating, r.ratings_count FROM masters m {RATING_JOIN_SQL} WHERE m.id = ?",
-            (master_id,)
-        ).fetchone()
-        conn.close()
-        return _attach_rating_defaults(dict(row)) if row else None
-
-
-def deactivate_master(master_id: int, telegram_id: int) -> bool:
-    """Faqat o'z profilini o'chirishga ruxsat beriladi."""
-    with _lock:
-        conn = get_connection()
-        cur = conn.execute(
-            "UPDATE masters SET is_active = 0 WHERE id = ? AND telegram_id = ?",
-            (master_id, telegram_id)
+            CREATE INDEX IF NOT EXISTS idx_masters_active ON masters (is_active);
+            CREATE INDEX IF NOT EXISTS idx_calls_master ON calls (master_id);
+            CREATE INDEX IF NOT EXISTS idx_ratings_master ON ratings (master_id);
+            """
         )
         conn.commit()
-        changed = cur.rowcount > 0
-        conn.close()
-        return changed
 
 
-def masters_by_telegram_id(telegram_id: int):
+# ---------------------------------------------------------------- masters --
+
+def insert_master(data: dict) -> int:
     with _lock:
-        conn = get_connection()
-        rows = conn.execute(
-            f"SELECT m.*, r.avg_rating, r.ratings_count FROM masters m {RATING_JOIN_SQL} "
-            "WHERE m.telegram_id = ? AND m.is_active = 1",
-            (telegram_id,)
-        ).fetchall()
-        conn.close()
-        return [_attach_rating_defaults(dict(r)) for r in rows]
-
-
-# ---------- CHAQIRUVLAR (CALLS) ----------
-
-def create_call(data: dict) -> int:
-    with _lock:
-        conn = get_connection()
-        cur = conn.execute("""
-            INSERT INTO calls (master_id, customer_telegram_id, customer_username, customer_name, status, created_at)
-            VALUES (?, ?, ?, ?, 'pending', ?)
-        """, (
-            data["master_id"],
-            data["customer_telegram_id"],
-            data.get("customer_username"),
-            data.get("customer_name"),
-            datetime.now(timezone.utc).isoformat(),
-        ))
+        conn = _get_conn()
+        cur = conn.execute(
+            """
+            INSERT INTO masters
+                (telegram_id, telegram_username, full_name, age, experience_years,
+                 specialty, city, phone, price_info, bio, photo_path, created_at, is_active)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+            """,
+            (
+                data["telegram_id"],
+                data.get("telegram_username"),
+                data["full_name"],
+                data["age"],
+                data["experience_years"],
+                data["specialty"],
+                data["city"],
+                data["phone"],
+                data.get("price_info"),
+                data.get("bio"),
+                data.get("photo_path"),
+                now_iso(),
+            ),
+        )
         conn.commit()
-        new_id = cur.lastrowid
-        conn.close()
-        return new_id
+        return cur.lastrowid
 
 
-def get_call(call_id: int):
+def list_masters(specialty: str | None, city: str | None, search: str | None) -> list[sqlite3.Row]:
+    conn = _get_conn()
+    query = [
+        """
+        SELECT m.*,
+               COALESCE(AVG(r.stars), 0) AS avg_rating,
+               COUNT(r.id) AS rating_count
+        FROM masters m
+        LEFT JOIN ratings r ON r.master_id = m.id
+        WHERE m.is_active = 1
+        """
+    ]
+    params: list = []
+    if specialty:
+        query.append("AND m.specialty = ?")
+        params.append(specialty)
+    if city:
+        query.append("AND m.city = ?")
+        params.append(city)
+    if search:
+        query.append("AND m.full_name LIKE ?")
+        params.append(f"%{search}%")
+    query.append("GROUP BY m.id ORDER BY avg_rating DESC, m.experience_years DESC, m.created_at DESC")
+    return conn.execute(" ".join(query), params).fetchall()
+
+
+def get_master(master_id: int) -> sqlite3.Row | None:
+    conn = _get_conn()
+    return conn.execute("SELECT * FROM masters WHERE id = ?", (master_id,)).fetchone()
+
+
+def list_my_masters(telegram_id: int) -> list[sqlite3.Row]:
+    conn = _get_conn()
+    return conn.execute(
+        """
+        SELECT m.*,
+               COALESCE(AVG(r.stars), 0) AS avg_rating,
+               COUNT(r.id) AS rating_count
+        FROM masters m
+        LEFT JOIN ratings r ON r.master_id = m.id
+        WHERE m.telegram_id = ? AND m.is_active = 1
+        GROUP BY m.id
+        ORDER BY m.created_at DESC
+        """,
+        (telegram_id,),
+    ).fetchall()
+
+
+def soft_delete_master(master_id: int, telegram_id: int) -> bool:
     with _lock:
-        conn = get_connection()
-        row = conn.execute("SELECT * FROM calls WHERE id = ?", (call_id,)).fetchone()
-        conn.close()
-        return dict(row) if row else None
+        conn = _get_conn()
+        cur = conn.execute(
+            "UPDATE masters SET is_active = 0 WHERE id = ? AND telegram_id = ?",
+            (master_id, telegram_id),
+        )
+        conn.commit()
+        return cur.rowcount > 0
 
 
-def list_pending_calls_for_master_telegram(telegram_id: int):
-    """Shu ustaga (telegram_id orqali) kelgan, hali tugatilmagan chaqiruvlar."""
+# ------------------------------------------------------------------ calls --
+
+def insert_call(master_id: int, customer_telegram_id: int, customer_username: str | None,
+                 customer_name: str | None) -> int:
     with _lock:
-        conn = get_connection()
-        rows = conn.execute("""
-            SELECT c.*, m.full_name AS master_name
-            FROM calls c
-            JOIN masters m ON c.master_id = m.id
-            WHERE m.telegram_id = ? AND c.status = 'pending'
-            ORDER BY c.created_at DESC
-        """, (telegram_id,)).fetchall()
-        conn.close()
-        return [dict(r) for r in rows]
+        conn = _get_conn()
+        cur = conn.execute(
+            """
+            INSERT INTO calls (master_id, customer_telegram_id, customer_username,
+                                customer_name, status, created_at)
+            VALUES (?, ?, ?, ?, 'pending', ?)
+            """,
+            (master_id, customer_telegram_id, customer_username, customer_name, now_iso()),
+        )
+        conn.commit()
+        return cur.lastrowid
 
 
-def finish_call(call_id: int, master_telegram_id: int):
-    """Faqat shu ustaning o'zi chaqiruvni tugatilgan deb belgilashi mumkin."""
+def get_call(call_id: int) -> sqlite3.Row | None:
+    conn = _get_conn()
+    return conn.execute("SELECT * FROM calls WHERE id = ?", (call_id,)).fetchone()
+
+
+def list_pending_calls(master_telegram_id: int) -> list[sqlite3.Row]:
+    conn = _get_conn()
+    return conn.execute(
+        """
+        SELECT c.* FROM calls c
+        JOIN masters m ON m.id = c.master_id
+        WHERE m.telegram_id = ? AND c.status = 'pending'
+        ORDER BY c.created_at DESC
+        """,
+        (master_telegram_id,),
+    ).fetchall()
+
+
+def finish_call(call_id: int, master_telegram_id: int) -> sqlite3.Row | None:
     with _lock:
-        conn = get_connection()
-        row = conn.execute("""
+        conn = _get_conn()
+        row = conn.execute(
+            """
             SELECT c.* FROM calls c
-            JOIN masters m ON c.master_id = m.id
+            JOIN masters m ON m.id = c.master_id
             WHERE c.id = ? AND m.telegram_id = ?
-        """, (call_id, master_telegram_id)).fetchone()
+            """,
+            (call_id, master_telegram_id),
+        ).fetchone()
         if not row:
-            conn.close()
             return None
         conn.execute(
             "UPDATE calls SET status = 'finished', finished_at = ? WHERE id = ?",
-            (datetime.now(timezone.utc).isoformat(), call_id)
+            (now_iso(), call_id),
         )
         conn.commit()
-        conn.close()
-        return dict(row)
+        return row
 
 
-# ---------- BAHOLASH (RATINGS) ----------
+# --------------------------------------------------------------- ratings --
 
-def add_rating(master_id: int, customer_telegram_id: int, stars: int, comment: str = None):
-    """Bitta mijoz bitta ustani faqat bir marta baholay oladi."""
+def has_rated(master_id: int, customer_telegram_id: int) -> bool:
+    conn = _get_conn()
+    row = conn.execute(
+        "SELECT 1 FROM ratings WHERE master_id = ? AND customer_telegram_id = ?",
+        (master_id, customer_telegram_id),
+    ).fetchone()
+    return row is not None
+
+
+def insert_rating(master_id: int, customer_telegram_id: int, stars: int, comment: str | None) -> bool:
     with _lock:
-        conn = get_connection()
-        existing = conn.execute(
-            "SELECT id FROM ratings WHERE master_id = ? AND customer_telegram_id = ?",
-            (master_id, customer_telegram_id)
-        ).fetchone()
-        if existing:
-            conn.close()
-            return None  # allaqachon baholagan
-        cur = conn.execute("""
-            INSERT INTO ratings (master_id, customer_telegram_id, stars, comment, created_at)
-            VALUES (?, ?, ?, ?, ?)
-        """, (
-            master_id, customer_telegram_id, stars, comment,
-            datetime.now(timezone.utc).isoformat(),
-        ))
-        conn.commit()
-        new_id = cur.lastrowid
-        conn.close()
-        return new_id
+        conn = _get_conn()
+        try:
+            conn.execute(
+                """
+                INSERT INTO ratings (master_id, customer_telegram_id, stars, comment, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (master_id, customer_telegram_id, stars, comment, now_iso()),
+            )
+            conn.commit()
+            return True
+        except sqlite3.IntegrityError:
+            return False
