@@ -5,6 +5,7 @@ Barcha REST API endpointlar + Mini App statik fayllarini xizmat qilish
 shu yerda joylashgan.
 """
 
+import asyncio
 import os
 import uuid
 from pathlib import Path
@@ -30,6 +31,10 @@ TELEGRAM_API = f"https://api.telegram.org/bot{BOT_TOKEN}"
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
 GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
 GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
+
+# Usta "Tugatdim" bosgandan necha soniyadan keyin mijozga fikr-mulohaza
+# xabari yuborilishi (standart — 10 daqiqa)
+FEEDBACK_DELAY_SECONDS = int(os.environ.get("FEEDBACK_DELAY_SECONDS", 600))
 
 ALLOWED_IMAGE_TYPES = {"image/jpeg", "image/png", "image/webp"}
 MAX_IMAGE_BYTES = 6 * 1024 * 1024  # 6MB
@@ -221,6 +226,23 @@ def api_pending_calls(master_telegram_id: int):
     return [dict(r) for r in rows]
 
 
+async def send_feedback_prompt(master_id: int, master_name: str, customer_telegram_id: int) -> None:
+    """10 daqiqa kutib, mijozga 👍/👎 fikr-mulohaza xabarini yuboradi.
+    Tugmalar bosilganda bot.py dagi callback handler javob beradi."""
+    await asyncio.sleep(FEEDBACK_DELAY_SECONDS)
+    reply_markup = {
+        "inline_keyboard": [[
+            {"text": "👍", "callback_data": f"rate:up:{master_id}"},
+            {"text": "👎", "callback_data": f"rate:down:{master_id}"},
+        ]]
+    }
+    await notify_telegram(
+        customer_telegram_id,
+        f"✅ <b>{master_name}</b> ish bajarilganini tasdiqladi.\n\nSizga yordam bera oldikmi?",
+        reply_markup,
+    )
+
+
 @app.post("/api/calls/{call_id}/finish")
 async def api_finish_call(call_id: int, master_telegram_id: int = Form(...)):
     call = db.finish_call(call_id, master_telegram_id)
@@ -230,16 +252,9 @@ async def api_finish_call(call_id: int, master_telegram_id: int = Form(...)):
     master = db.get_master(call["master_id"])
     master_name = master["full_name"] if master else "Usta"
 
-    webapp_link = f"{WEBAPP_URL}?tab=rate&master_id={call['master_id']}" if WEBAPP_URL else None
-    reply_markup = None
-    if webapp_link:
-        reply_markup = {
-            "inline_keyboard": [[{"text": "⭐ Ustani baholash", "web_app": {"url": webapp_link}}]]
-        }
-    await notify_telegram(
-        call["customer_telegram_id"],
-        f"✅ <b>{master_name}</b> ish bajarilganini tasdiqladi.\nIltimos, ustani baholang!",
-        reply_markup,
+    # Darhol emas — 10 daqiqadan keyin fikr-mulohaza so'raladi (fon vazifasi sifatida)
+    asyncio.create_task(
+        send_feedback_prompt(call["master_id"], master_name, call["customer_telegram_id"])
     )
     return {"status": "ok"}
 

@@ -757,29 +757,6 @@ button, input, select, textarea {
 
 .modal-sub { font-size: 13.5px; color: var(--ink-soft); margin: 0 0 18px; }
 
-.star-row {
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  font-size: 38px;
-  margin-bottom: 16px;
-}
-
-.star {
-  color: var(--line);
-  cursor: pointer;
-  transition: transform 0.15s ease, color 0.2s ease;
-}
-
-.star.filled { color: var(--brass); }
-.star.bounce { animation: starBounce 0.4s cubic-bezier(0.34, 1.56, 0.64, 1); }
-
-@keyframes starBounce {
-  0% { transform: scale(1); }
-  40% { transform: scale(1.4) rotate(-8deg); }
-  100% { transform: scale(1); }
-}
-
 .modal-card textarea {
   width: 100%;
   border: 1px solid var(--line);
@@ -1043,8 +1020,7 @@ button:focus-visible,
 input:focus-visible,
 select:focus-visible,
 textarea:focus-visible,
-.chip:focus-visible,
-.star:focus-visible {
+.chip:focus-visible {
   outline: 2px solid var(--orange);
   outline-offset: 2px;
 }

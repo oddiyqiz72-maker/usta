@@ -23,6 +23,7 @@ from aiogram.enums import ParseMode
 from aiogram.filters import CommandStart
 from aiogram.types import (
     Message,
+    CallbackQuery,
     InlineKeyboardMarkup,
     InlineKeyboardButton,
     ReplyKeyboardMarkup,
@@ -114,6 +115,44 @@ async def cmd_help(message: Message) -> None:
         "ℹ️ <b>Ustak</b> — mahalliy ustalarni topish va AI yordamchidan maslahat olish uchun bot.\n"
         "/start — ilovani ochish"
     )
+
+
+@dp.callback_query(F.data.startswith("rate:"))
+async def on_rate_feedback(callback: CallbackQuery) -> None:
+    """Mijoz 👍/👎 bosganda ishlaydi — usta ish tugagandan 10 daqiqa
+    keyin yuborilgan fikr-mulohaza xabaridagi tugmalar."""
+    parts = (callback.data or "").split(":")
+    if len(parts) != 3:
+        await callback.answer()
+        return
+
+    _, direction, master_id_str = parts
+    try:
+        master_id = int(master_id_str)
+    except ValueError:
+        await callback.answer()
+        return
+
+    customer_id = callback.from_user.id
+
+    if db.has_rated(master_id, customer_id):
+        await callback.answer("Siz bu ustaga allaqachon fikr bildirgansiz 🙏", show_alert=True)
+        return
+
+    stars = 5 if direction == "up" else 2
+    db.insert_rating(master_id, customer_id, stars, None)
+
+    if direction == "up":
+        thank_you = "Ajoyib! Fikringiz uchun rahmat 😊🤝"
+    else:
+        thank_you = "Fikringiz uchun rahmat 🙏 Keyingi safar yaxshiroq bo'lishiga harakat qilamiz."
+
+    try:
+        if callback.message:
+            await callback.message.edit_text(thank_you, reply_markup=None)
+    except Exception:
+        pass
+    await callback.answer("Rahmat!")
 
 
 @dp.message()

@@ -21,8 +21,6 @@ let specialties = [];
 let cities = [];
 let activeSpecialty = "";
 let searchDebounce = null;
-let selectedStars = 0;
-let rateMasterId = null;
 let bgWarningAccepted = false;
 let pendingCallMasterId = null;
 let customerProfile = null;
@@ -653,76 +651,11 @@ el("aiTextInput").addEventListener("keydown", (e) => {
   }
 });
 
-// ============================================================= rating ==
-
-function openRateModal(masterId) {
-  rateMasterId = masterId;
-  selectedStars = 0;
-  el("rateComment").value = "";
-  document.querySelectorAll(".star").forEach((s) => s.classList.remove("filled", "bounce"));
-  el("rateModal").hidden = false;
-}
-
-function closeRateModal() {
-  el("rateModal").hidden = true;
-  rateMasterId = null;
-}
-
-document.querySelectorAll(".star").forEach((star) => {
-  star.addEventListener("click", () => {
-    selectedStars = parseInt(star.dataset.value, 10);
-    document.querySelectorAll(".star").forEach((s) => {
-      const val = parseInt(s.dataset.value, 10);
-      s.classList.toggle("filled", val <= selectedStars);
-      if (val === selectedStars) {
-        s.classList.remove("bounce");
-        void s.offsetWidth; // reflow — animatsiyani qayta ishga tushirish
-        s.classList.add("bounce");
-      }
-    });
-  });
-});
-
-el("rateSkip").addEventListener("click", closeRateModal);
-
-el("rateSubmit").addEventListener("click", async () => {
-  if (!selectedStars) {
-    showToast("Iltimos, yulduzcha tanlang", "error");
-    return;
-  }
-  const btn = el("rateSubmit");
-  btn.disabled = true;
-
-  const formData = new FormData();
-  formData.append("customer_telegram_id", CURRENT_TG_ID);
-  formData.append("stars", selectedStars);
-  formData.append("comment", el("rateComment").value.trim());
-
-  try {
-    await apiFetch(`/api/masters/${rateMasterId}/rate`, { method: "POST", body: formData });
-    btn.innerHTML = `<span class="stamp-pop">✅ Rahmat!</span>`;
-    if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
-    setTimeout(() => {
-      closeRateModal();
-      btn.disabled = false;
-      btn.textContent = "Yuborish";
-    }, 1000);
-  } catch (err) {
-    showToast(err.message, "error");
-    btn.disabled = false;
-  }
-});
-
 // ============================================================== init ==
 
 function handleDeepLink() {
   const params = new URLSearchParams(window.location.search);
   let tab = params.get("tab");
-  const masterId = params.get("master_id");
-  if (tab === "rate" && masterId) {
-    openRateModal(masterId);
-    return;
-  }
   // eski deep-linklar bilan moslik
   if (tab === "search") tab = "masters";
   if (tab === "register") {

@@ -87,10 +87,12 @@ usta-bot/
      chaqiruvlar, o'z e'lonlari va **"🧰 Usta bo'lish"** tugmasi (bosilsa
      ro'yxatdan o'tish formasi modal oynada ochiladi).
 3. **Usta chaqiruvni tugatadi** — "Profil" bo'limida "✅ Tugatdim" bosadi →
-   mijozga bot orqali baholash taklifi (deep-link) yuboriladi.
-4. **Mijoz baholaydi** — bot xabaridagi tugma orqali Mini App
-   `?tab=rate&master_id=X` bilan ochiladi, yulduzcha + izoh bilan
-   baholaydi (bitta mijoz — bitta usta uchun faqat bir marta).
+   **10 daqiqadan keyin** mijozga botdan avtomatik xabar boradi:
+   "Sizga yordam bera oldikmi?" 👍/👎 tugmalari bilan (Mini App ochilmaydi,
+   to'g'ridan-to'g'ri Telegram chatida).
+4. **Mijoz baholaydi** — shu xabardagi 👍 yoki 👎 tugmasini bosadi (bitta
+   mijoz — bitta usta uchun faqat bir marta hisoblanadi). 👍 = yuqori
+   baho, 👎 = past baho sifatida saqlanadi.
 
 ## Muhim eslatmalar
 
@@ -99,3 +101,9 @@ usta-bot/
 - Rasm fon tekshiruvi 100% aniq emas — faqat taxminiy heuristika.
 - Bot xabarlari best-effort: `BOT_TOKEN` topilmasa yoki Telegram API
   javob bermasa, asosiy amal (chaqiruv/tugatish) baribir saqlanadi.
+- Fikr-mulohaza xabari (👍/👎) 10 daqiqa kechikish bilan xotirada
+  (`asyncio.create_task`) yuboriladi — `FEEDBACK_DELAY_SECONDS` env
+  o'zgaruvchisi orqali sozlanadi. **Eslatma:** agar shu 10 daqiqa ichida
+  server qayta ishga tushsa (deploy, restart), rejalashtirilgan xabar
+  yo'qoladi — juda muhim bo'lsa, buni doimiy vazifa navbati (masalan,
+  Redis/Celery) bilan almashtirish kerak bo'ladi.
