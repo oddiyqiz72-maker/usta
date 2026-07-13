@@ -1,680 +1,654 @@
-// =========================================================
-// USTAK — Mini App frontend logikasi
-// =========================================================
+// ===========================================================
+// USTAK — webapp frontend logic (vanilla JS)
+// ===========================================================
+const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
+if (tg) { tg.ready(); tg.expand(); }
 
-const tg = window.Telegram?.WebApp;
-if (tg) {
-  tg.ready();
-  tg.expand();
-}
-
-const tgUser = tg?.initDataUnsafe?.user || null;
-const CURRENT_TG_ID = tgUser?.id || null;
-const CURRENT_USERNAME = tgUser?.username || null;
-const CURRENT_NAME = [tgUser?.first_name, tgUser?.last_name].filter(Boolean).join(" ") || null;
+const tgUser = (tg && tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user : null;
+const TG_ID = tgUser ? tgUser.id : null;
+const TG_USERNAME = tgUser ? (tgUser.username || "") : "";
+const TG_NAME = tgUser ? `${tgUser.first_name || ""} ${tgUser.last_name || ""}`.trim() : "Mehmon";
 
 const API = ""; // bir xil origin
 
-// ---------------------------------------------------------------- state --
+const state = {
+  specialties: [],
+  cities: [],
+  activeSpecialty: "",
+  activeCity: "",
+  searchQuery: "",
+  masters: [],
+  favorites: new Set(),
+  aiHistory: [], // {role, content}
+  aiPendingImage: null, // {base64, mediaType, previewUrl}
+  currentCallMaster: null,
+  currentRateMaster: null,
+  proPlans: [],
+  userPrefs: { dark_mode: 1, animations: 1 },
+};
 
-let specialties = [];
-let cities = [];
-let activeSpecialty = "";
-let searchDebounce = null;
-let bgWarningAccepted = false;
-let pendingCallMasterId = null;
-let customerProfile = null;
-let aiHistory = [];
-let aiImageFile = null;
-let aiSending = false;
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => Array.from(document.querySelectorAll(sel));
 
-// -------------------------------------------------------------- helpers --
-
-function el(id) { return document.getElementById(id); }
-
-function showToast(message, type = "info") {
-  const container = el("toastContainer");
-  const toast = document.createElement("div");
-  toast.className = `toast ${type}`;
-  toast.textContent = message;
-  container.appendChild(toast);
-  setTimeout(() => toast.remove(), 3000);
+function toast(msg) {
+  const el = $("#toast");
+  el.textContent = msg;
+  el.classList.remove("hidden");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.add("hidden"), 2600);
 }
 
-function extractErrorMessage(err) {
-  // FastAPI/Pydantic xatolari ro'yxat yoki obyekt bo'lishi mumkin
-  if (!err) return "Noma'lum xatolik yuz berdi";
-  if (typeof err === "string") return err;
-  if (err.detail) {
-    if (typeof err.detail === "string") return err.detail;
-    if (Array.isArray(err.detail)) {
-      return err.detail.map((d) => d.msg || JSON.stringify(d)).join(", ");
-    }
-    return JSON.stringify(err.detail);
-  }
-  return "Noma'lum xatolik yuz berdi";
-}
-
-async function apiFetch(path, options = {}) {
-  const res = await fetch(API + path, options);
-  let data = null;
-  try { data = await res.json(); } catch (_) { /* body yo'q */ }
+async function api(path, opts = {}) {
+  const res = await fetch(API + path, {
+    headers: opts.body && !(opts.body instanceof FormData) ? { "Content-Type": "application/json" } : undefined,
+    ...opts,
+  });
   if (!res.ok) {
-    throw new Error(extractErrorMessage(data));
+    let msg = "Xatolik yuz berdi";
+    try {
+      const data = await res.json();
+      msg = extractErrorMessage(data);
+    } catch (e) { /* ignore */ }
+    throw new Error(msg);
   }
-  return data;
+  if (res.status === 204) return null;
+  return res.json();
 }
 
-function timeAgo(isoString) {
-  const diffMs = Date.now() - new Date(isoString).getTime();
-  const mins = Math.floor(diffMs / 60000);
-  if (mins < 1) return "hozirgina";
-  if (mins < 60) return `${mins} daqiqa oldin`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours} soat oldin`;
-  const days = Math.floor(hours / 24);
-  return `${days} kun oldin`;
-}
-
-// ================================================================ tabs ==
-
-const tabButtons = document.querySelectorAll(".tab-btn");
-const tabIndicator = el("tabIndicator");
-
-function setActiveTabVisual(tabName, animateIndicator = true) {
-  tabButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.tab === tabName));
-  document.querySelectorAll(".tab-panel").forEach((panel) => {
-    panel.classList.toggle("active", panel.id === `tab-${tabName}`);
-  });
-  const idx = Array.from(tabButtons).findIndex((b) => b.dataset.tab === tabName);
-  if (idx >= 0) {
-    tabIndicator.style.transition = animateIndicator ? "" : "none";
-    tabIndicator.style.transform = `translateX(${idx * 100}%)`;
+// FastAPI/Pydantic validatsiya xatolarini o'qiladigan matnga aylantiradi
+function extractErrorMessage(data) {
+  const d = data && data.detail !== undefined ? data.detail : data;
+  if (typeof d === "string") return d;
+  if (Array.isArray(d)) {
+    return d.map((e) => (typeof e === "string" ? e : (e.msg || JSON.stringify(e)))).join("\n");
   }
-}
-
-tabButtons.forEach((btn) => {
-  btn.addEventListener("click", () => {
-    const tabName = btn.dataset.tab;
-    setActiveTabVisual(tabName);
-    if (tabName === "profile") loadProfileTab();
-  });
-});
-
-function goToMastersTab(specialtyKey) {
-  if (specialtyKey) {
-    activeSpecialty = specialtyKey;
-    document.querySelectorAll(".chip").forEach((c) => {
-      c.classList.toggle("active", c.dataset.key === specialtyKey);
-    });
+  if (d && typeof d === "object") {
+    if (Array.isArray(d.detail)) return extractErrorMessage(d.detail);
+    return JSON.stringify(d);
   }
-  setActiveTabVisual("masters");
-  loadMasters();
+  return "Xatolik yuz berdi";
 }
 
-// ============================================================ reference ==
+// ------------------------------------------------------- theme / prefs ---
 
-async function loadReferenceData() {
-  const [spec, cty] = await Promise.all([
-    apiFetch("/api/specialties"),
-    apiFetch("/api/cities"),
-  ]);
-  specialties = spec;
-  cities = cty;
+function applyTheme() {
+  document.body.setAttribute("data-theme", state.userPrefs.dark_mode ? "dark" : "light");
+  document.body.classList.toggle("no-anim", !state.userPrefs.animations);
+  $("#darkModeToggle").checked = !!state.userPrefs.dark_mode;
+  $("#animToggle").checked = !!state.userPrefs.animations;
+}
 
-  // qidiruv chip'lari
-  const chipRow = el("specialtyChips");
-  chipRow.innerHTML = `<button class="chip active" data-key="">🗂️ Hammasi</button>` +
-    specialties.map((s) => `<button class="chip" data-key="${s.key}">${s.emoji} ${s.name}</button>`).join("");
+async function loadUser() {
+  if (!TG_ID) return;
+  try {
+    const user = await api(`/api/user/${TG_ID}`);
+    state.userPrefs.dark_mode = user.dark_mode;
+    state.userPrefs.animations = user.animations;
+    $("#profileName").textContent = user.full_name || TG_NAME || "Foydalanuvchi";
+    $("#profilePhone").textContent = user.phone || "";
+  } catch (e) {
+    $("#profileName").textContent = TG_NAME || "Foydalanuvchi";
+    $("#profilePhone").textContent = "Botga /start yuborib, raqamingizni ulashing";
+  }
+  applyTheme();
+}
 
-  chipRow.querySelectorAll(".chip").forEach((chip) => {
+// -------------------------------------------------------------- tabs ----
+
+function switchView(name) {
+  $$(".view").forEach((v) => v.classList.add("hidden"));
+  $(`#view-${name}`).classList.remove("hidden");
+  $$(".nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
+  const subs = {
+    masters: "ustangizni toping",
+    ai: "aqlli yordamchi",
+    pro: "ustalar uchun",
+    profile: "sozlamalar",
+  };
+  $("#brandSub").textContent = subs[name] || "";
+  if (name === "pro") renderPro();
+}
+
+$$(".nav-btn").forEach((btn) => btn.addEventListener("click", () => switchView(btn.dataset.view)));
+
+// ---------------------------------------------------------- reference ----
+
+async function loadReference() {
+  state.specialties = await api("/api/specialties");
+  state.cities = await api("/api/cities");
+  const proData = await api("/api/pro-plans");
+  state.proPlans = proData.plans;
+  renderChips();
+  renderCitySelects();
+  renderRegSpecialties();
+  renderProBenefits(proData.benefits);
+}
+
+function renderChips() {
+  const wrap = $("#specialtyChips");
+  wrap.innerHTML = `<div class="chip ${state.activeSpecialty === "" ? "active" : ""}" data-code="">🗂️ Hammasi</div>` +
+    state.specialties.map((s) => `<div class="chip ${state.activeSpecialty === s.code ? "active" : ""}" data-code="${s.code}">${s.emoji} ${s.name}</div>`).join("");
+  $$(".chip", wrap).forEach((chip) => {
     chip.addEventListener("click", () => {
-      chipRow.querySelectorAll(".chip").forEach((c) => c.classList.remove("active"));
-      chip.classList.add("active");
-      activeSpecialty = chip.dataset.key;
+      state.activeSpecialty = chip.dataset.code;
+      renderChips();
       loadMasters();
     });
   });
-
-  // hudud filter select
-  const cityFilter = el("cityFilter");
-  cityFilter.innerHTML = `<option value="">Barcha hududlar</option>` +
-    cities.map((c) => `<option value="${c}">${c}</option>`).join("");
-  cityFilter.addEventListener("change", loadMasters);
-
-  // ro'yxatdan o'tish forma select'lari
-  const fSpecialty = el("f_specialty");
-  fSpecialty.innerHTML = `<option value="" disabled selected>Tanlang...</option>` +
-    specialties.map((s) => `<option value="${s.key}">${s.emoji} ${s.name}</option>`).join("");
-
-  const fCity = el("f_city");
-  fCity.innerHTML = `<option value="" disabled selected>Tanlang...</option>` +
-    cities.map((c) => `<option value="${c}">${c}</option>`).join("");
 }
 
-// ============================================================== search ==
-
-function renderSkeletons(count = 3) {
-  const list = el("masterList");
-  list.innerHTML = Array.from({ length: count })
-    .map(() => `<div class="skeleton-card"></div>`)
-    .join("");
+function renderCitySelects() {
+  const opts = state.cities.map((c) => `<option value="${c}">${c}</option>`).join("");
+  $("#cityFilter").innerHTML = `<option value="">📍 Barcha hududlar</option>` + opts;
+  $("#regCity").innerHTML = `<option value="" disabled selected>Hududni tanlang</option>` + opts;
 }
 
-function starString(avg) {
-  const rounded = Math.round(avg);
-  return "★".repeat(rounded) + "☆".repeat(5 - rounded);
+function renderRegSpecialties() {
+  $("#regSpecialty").innerHTML = `<option value="" disabled selected>Sohani tanlang</option>` +
+    state.specialties.map((s) => `<option value="${s.code}">${s.emoji} ${s.name}</option>`).join("");
 }
 
-function renderMasterCard(m, index) {
-  const photo = m.photo_path ? m.photo_path : "";
-  const telegramBtn = m.telegram_username
-    ? `<a class="action-btn telegram" href="https://t.me/${m.telegram_username}" target="_blank" rel="noopener">✈️</a>`
-    : "";
-  const priceHtml = m.price_info ? `<p class="master-price">💰 ${escapeHtml(m.price_info)}</p>` : "";
-  const bioHtml = m.bio ? `<p class="master-bio">${escapeHtml(m.bio)}</p>` : "";
-
-  return `
-    <div class="master-card" style="animation-delay:${index * 60}ms" data-master-id="${m.id}">
-      <div class="master-card-top">
-        ${photo ? `<img class="master-photo" src="${photo}" alt="${escapeHtml(m.full_name)}">` : `<div class="master-photo"></div>`}
-        <div class="master-info">
-          <h3 class="master-name">${escapeHtml(m.full_name)}</h3>
-          <span class="master-specialty">${escapeHtml(m.specialty_label)}</span>
-          <div class="master-meta">
-            <span>🎂 ${m.age} yosh</span>
-            <span>🛠️ ${m.experience_years} yil</span>
-            <span>📍 ${escapeHtml(m.city)}</span>
-          </div>
-          <div class="master-rating">
-            <span class="stars">${starString(m.avg_rating)}</span>
-            <span class="count">${m.avg_rating > 0 ? m.avg_rating.toFixed(1) : "—"} (${m.rating_count})</span>
-          </div>
-        </div>
-      </div>
-      ${bioHtml}
-      ${priceHtml}
-      <div class="master-actions">
-        <a class="action-btn call" href="tel:${m.phone}">📞 Qo'ng'iroq</a>
-        ${telegramBtn}
-        <button class="action-btn call-master" data-master-id="${m.id}">🔔 Chaqirish</button>
-      </div>
-    </div>
-  `;
-}
-
-function escapeHtml(str) {
-  if (str === null || str === undefined) return "";
-  return String(str)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
-}
+// ------------------------------------------------------------ masters ----
 
 async function loadMasters() {
-  renderSkeletons();
-  el("emptyState").hidden = true;
-
   const params = new URLSearchParams();
-  if (activeSpecialty) params.set("specialty", activeSpecialty);
-  const city = el("cityFilter").value;
-  if (city) params.set("city", city);
-  const search = el("searchInput").value.trim();
-  if (search) params.set("search", search);
-
-  try {
-    const masters = await apiFetch(`/api/masters?${params.toString()}`);
-    const list = el("masterList");
-    if (masters.length === 0) {
-      list.innerHTML = "";
-      el("emptyState").hidden = false;
-      return;
-    }
-    list.innerHTML = masters.map((m, i) => renderMasterCard(m, i)).join("");
-    attachCallHandlers();
-  } catch (err) {
-    showToast(err.message, "error");
-    el("masterList").innerHTML = "";
-  }
+  if (state.activeSpecialty) params.set("specialty", state.activeSpecialty);
+  if (state.activeCity) params.set("city", state.activeCity);
+  if (state.searchQuery) params.set("search", state.searchQuery);
+  state.masters = await api(`/api/masters?${params.toString()}`);
+  renderMasters();
 }
 
-el("searchInput").addEventListener("input", () => {
-  clearTimeout(searchDebounce);
-  searchDebounce = setTimeout(loadMasters, 350);
+function specialtyOf(code) {
+  return state.specialties.find((s) => s.code === code) || { name: code, emoji: "🛠️", color: "#888" };
+}
+
+function renderMasters() {
+  const list = $("#masterList");
+  const empty = $("#mastersEmpty");
+  if (!state.masters.length) {
+    list.innerHTML = "";
+    empty.classList.remove("hidden");
+    return;
+  }
+  empty.classList.add("hidden");
+  list.innerHTML = state.masters.map((m) => masterCardHtml(m)).join("");
+  $$(".master-card", list).forEach((card) => {
+    card.addEventListener("click", (e) => {
+      if (e.target.closest(".action-btn")) return;
+      openMasterModal(Number(card.dataset.id));
+    });
+  });
+  $$(".action-btn.call", list).forEach((btn) => btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    openCallModal(Number(btn.closest(".master-card").dataset.id));
+  }));
+  $$(".action-btn.fav", list).forEach((btn) => btn.addEventListener("click", (e) => {
+    e.stopPropagation();
+    toggleFavorite(Number(btn.closest(".master-card").dataset.id), btn);
+  }));
+  $$(".action-btn.tel", list).forEach((btn) => btn.addEventListener("click", (e) => e.stopPropagation()));
+}
+
+function masterCardHtml(m) {
+  const sp = specialtyOf(m.specialty);
+  const isFav = state.favorites.has(m.id);
+  const rating = m.avg_rating ? m.avg_rating.toFixed(1) : "—";
+  return `
+  <div class="master-card ${m.is_pro ? "is-pro" : ""}" data-id="${m.id}">
+    <img class="master-photo" src="${m.photo_path}" alt="${m.full_name}">
+    <div class="master-main">
+      <div class="master-top-row">
+        <span class="master-name">${escapeHtml(m.full_name)}</span>
+        ${m.is_pro ? `<span class="pro-badge">PRO</span>` : ""}
+        <span class="master-code">${m.master_code}</span>
+      </div>
+      <div class="master-specialty">${sp.emoji} ${sp.name} · ${m.city}</div>
+      <div class="master-meta">
+        <span>🧰 ${m.experience_years} yil tajriba</span>
+        ${m.price_info ? `<span>💰 ${escapeHtml(m.price_info)}</span>` : ""}
+      </div>
+      <div class="master-rating">⭐ ${rating} <span class="count">(${m.rating_count})</span></div>
+    </div>
+    <div class="master-actions">
+      <a class="action-btn tel" href="tel:${m.phone}" title="Qo'ng'iroq">📞</a>
+      <button class="action-btn fav ${isFav ? "active" : ""}" title="Saqlash">${isFav ? "❤️" : "🤍"}</button>
+      <button class="action-btn call" title="Chaqirish">🔔</button>
+    </div>
+  </div>`;
+}
+
+function escapeHtml(s) {
+  return (s || "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+$("#searchInput").addEventListener("input", debounce((e) => {
+  state.searchQuery = e.target.value.trim();
+  loadMasters();
+}, 350));
+
+$("#cityFilter").addEventListener("change", (e) => {
+  state.activeCity = e.target.value;
+  loadMasters();
 });
 
-// -------------------------------------------------------- chaqirish tugmasi --
-
-function attachCallHandlers() {
-  document.querySelectorAll(".action-btn.call-master").forEach((btn) => {
-    btn.addEventListener("click", () => handleCallMaster(btn));
-  });
+function debounce(fn, ms) {
+  let t;
+  return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
 
-function handleCallMaster(btn) {
-  if (!CURRENT_TG_ID) {
-    showToast("Telegram orqali ochilishi kerak", "error");
-    return;
-  }
-  pendingCallMasterId = btn.dataset.masterId;
-  el("locationInput").value = customerProfile?.location || "";
-  el("locationModal").hidden = false;
-  el("locationInput").focus();
+// -------------------------------------------------------- master modal ----
+
+function openMasterModal(id) {
+  const m = state.masters.find((x) => x.id === id);
+  if (!m) return;
+  const sp = specialtyOf(m.specialty);
+  const isFav = state.favorites.has(m.id);
+  $("#masterModalSheet").innerHTML = `
+    <img class="md-photo" src="${m.photo_path}" alt="${m.full_name}">
+    <div class="md-header">
+      <span class="md-name">${escapeHtml(m.full_name)}</span>
+      ${m.is_pro ? `<span class="pro-badge">PRO</span>` : ""}
+      <span class="master-code">${m.master_code}</span>
+    </div>
+    <div class="master-specialty">${sp.emoji} ${sp.name} · ${m.city}</div>
+    <div class="md-row">
+      <span>🧰 ${m.experience_years} yil tajriba</span>
+      <span>🎂 ${m.age} yosh</span>
+      <span>⭐ ${m.avg_rating ? m.avg_rating.toFixed(1) : "—"} (${m.rating_count})</span>
+      ${m.price_info ? `<span>💰 ${escapeHtml(m.price_info)}</span>` : ""}
+    </div>
+    ${m.bio ? `<div class="md-bio">${escapeHtml(m.bio)}</div>` : ""}
+    <div class="md-actions">
+      <a class="btn-ghost" style="text-align:center;text-decoration:none;display:flex;align-items:center;justify-content:center;" href="tel:${m.phone}">📞 Qo'ng'iroq</a>
+      <button class="btn-primary" id="mdCallBtn">🔔 Chaqirish</button>
+    </div>
+    <button class="btn-ghost" style="margin-top:10px;width:100%;" id="mdFavBtn">${isFav ? "❤️ Saqlangan" : "🤍 Saqlash"}</button>
+  `;
+  $("#mdCallBtn").addEventListener("click", () => { closeModal("masterModal"); openCallModal(id); });
+  $("#mdFavBtn").addEventListener("click", (e) => toggleFavorite(id, e.target));
+  openModal("masterModal");
 }
 
-async function submitCallWithLocation() {
-  const masterId = pendingCallMasterId;
-  const location = el("locationInput").value.trim();
-  if (!location) {
-    showToast("Iltimos, manzilingizni kiriting", "error");
-    return;
-  }
-  const btn = document.querySelector(`.action-btn.call-master[data-master-id="${masterId}"]`);
-  const submitBtn = el("locationSubmit");
-  submitBtn.disabled = true;
+function openModal(id) { $(`#${id}`).classList.remove("hidden"); }
+function closeModal(id) { $(`#${id}`).classList.add("hidden"); }
+$$(".modal-overlay").forEach((ov) => ov.addEventListener("click", (e) => { if (e.target === ov) ov.classList.add("hidden"); }));
 
-  const formData = new FormData();
-  formData.append("master_id", masterId);
-  formData.append("customer_telegram_id", CURRENT_TG_ID);
-  if (CURRENT_USERNAME) formData.append("customer_username", CURRENT_USERNAME);
-  if (CURRENT_NAME) formData.append("customer_name", CURRENT_NAME);
-  formData.append("location", location);
+// ------------------------------------------------------------- favorite ----
 
+async function toggleFavorite(masterId, btnEl) {
+  if (!TG_ID) { toast("Botdan kirib, /start bosing"); return; }
   try {
-    await apiFetch("/api/calls", { method: "POST", body: formData });
-    customerProfile = customerProfile || {};
-    customerProfile.location = location;
-    el("locationModal").hidden = true;
-    if (btn) {
-      btn.classList.add("stamped");
-      btn.disabled = true;
-      btn.innerHTML = `<span class="stamp-pop">✅ Chaqirildi!</span>`;
+    const res = await api("/api/favorites/toggle", {
+      method: "POST",
+      body: JSON.stringify({ customer_telegram_id: TG_ID, master_id: masterId }),
+    });
+    if (res.saved) state.favorites.add(masterId); else state.favorites.delete(masterId);
+    if (btnEl) {
+      if (btnEl.classList.contains("action-btn")) {
+        btnEl.classList.toggle("active", res.saved);
+        btnEl.textContent = res.saved ? "❤️" : "🤍";
+      } else {
+        btnEl.textContent = res.saved ? "❤️ Saqlangan" : "🤍 Saqlash";
+      }
     }
-    if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
-    showToast("Usta xabardor qilindi. Tez orada bog'lanadi!", "success");
-  } catch (err) {
-    showToast(err.message, "error");
+    toast(res.saved ? "Saqlandi" : "Saqlanganlardan olib tashlandi");
+  } catch (e) { toast(e.message); }
+}
+
+async function loadFavorites() {
+  if (!TG_ID) return;
+  try {
+    const favs = await api(`/api/favorites/${TG_ID}`);
+    state.favorites = new Set(favs.map((f) => f.id));
+  } catch (e) { /* ignore */ }
+}
+
+// ---------------------------------------------------------------- call ----
+
+function openCallModal(masterId) {
+  const m = state.masters.find((x) => x.id === masterId) || null;
+  state.currentCallMaster = masterId;
+  $("#callModalMasterName").textContent = m ? `${m.full_name}ni chaqirish` : "Ustani chaqirish";
+  $("#callNoteInput").value = "";
+  openModal("callModal");
+}
+$("#callCancelBtn").addEventListener("click", () => closeModal("callModal"));
+$("#callConfirmBtn").addEventListener("click", async () => {
+  if (!TG_ID) { toast("Botdan kirib, /start bosing"); return; }
+  const btn = $("#callConfirmBtn");
+  btn.disabled = true; btn.textContent = "Yuborilmoqda...";
+  try {
+    await api("/api/calls", {
+      method: "POST",
+      body: JSON.stringify({
+        master_id: state.currentCallMaster,
+        customer_telegram_id: TG_ID,
+        customer_username: TG_USERNAME,
+        customer_name: TG_NAME,
+        customer_phone: $("#profilePhone").textContent || "",
+        note: $("#callNoteInput").value.trim() || null,
+      }),
+    });
+    closeModal("callModal");
+    toast("✅ Chaqirildi! Usta tez orada bog'lanadi");
+  } catch (e) {
+    toast(e.message);
   } finally {
-    submitBtn.disabled = false;
+    btn.disabled = false; btn.textContent = "🔔 Chaqirish";
   }
+});
+
+// -------------------------------------------------------------- rating ----
+
+let selectedStars = 0;
+function openRateModal(masterId) {
+  state.currentRateMaster = masterId;
+  selectedStars = 0;
+  paintStars();
+  $("#rateComment").value = "";
+  openModal("rateModal");
+}
+$("#rateCancelBtn").addEventListener("click", () => closeModal("rateModal"));
+$$("#starRow span").forEach((star) => star.addEventListener("click", () => {
+  selectedStars = Number(star.dataset.star);
+  paintStars();
+}));
+function paintStars() {
+  $$("#starRow span").forEach((s) => s.classList.toggle("filled", Number(s.dataset.star) <= selectedStars));
+}
+$("#rateSubmitBtn").addEventListener("click", async () => {
+  if (!selectedStars) { toast("Yulduzchalarni tanlang"); return; }
+  try {
+    await api(`/api/masters/${state.currentRateMaster}/rate`, {
+      method: "POST",
+      body: JSON.stringify({ customer_telegram_id: TG_ID, stars: selectedStars, comment: $("#rateComment").value.trim() || null }),
+    });
+    closeModal("rateModal");
+    toast("Rahmat! Bahoyingiz yuborildi ⭐");
+  } catch (e) { toast(e.message); }
+});
+
+// ------------------------------------------------------------- AI chat ----
+
+function renderAiBubble(role, text, imgUrl) {
+  const chat = $("#aiChat");
+  const div = document.createElement("div");
+  div.className = `ai-msg ${role}`;
+  div.innerHTML = `${escapeHtml(text).replace(/\n/g, "<br>")}${imgUrl ? `<img src="${imgUrl}">` : ""}`;
+  chat.appendChild(div);
+  chat.scrollTop = chat.scrollHeight;
+  return div;
 }
 
-el("locationCancel").addEventListener("click", () => {
-  el("locationModal").hidden = true;
-  pendingCallMasterId = null;
-});
+if (!state.aiHistory.length) {
+  renderAiBubble("assistant", "Assalomu alaykum! Men USTAK AI Yordamchiman 🤖\n\nMuammoingizni yozing (masalan: \"kranim tomchilayapti\") yoki rasm yuboring — sizga qaysi usta kerakligini aytib beraman.");
+}
 
-el("locationSubmit").addEventListener("click", submitCallWithLocation);
-
-// ========================================================== reg modal ==
-
-el("becomeMasterBtn").addEventListener("click", () => {
-  el("registerModal").hidden = false;
-});
-
-el("registerModalClose").addEventListener("click", () => {
-  el("registerModal").hidden = true;
-});
-
-// ======================================================== register form ==
-
-const photoInput = el("photoInput");
-const photoPreview = el("photoPreview");
-let selectedPhotoFile = null;
-
-el("photoUpload").addEventListener("click", (e) => {
-  if (e.target.tagName !== "INPUT") photoInput.click();
-});
-
-photoInput.addEventListener("change", () => {
-  const file = photoInput.files[0];
+$("#aiAttachBtn").addEventListener("click", () => $("#aiImageInput").click());
+$("#aiImageInput").addEventListener("change", () => {
+  const file = $("#aiImageInput").files[0];
   if (!file) return;
-  selectedPhotoFile = file;
-  bgWarningAccepted = false;
-
   const reader = new FileReader();
-  reader.onload = (e) => {
-    const img = new Image();
-    img.onload = () => {
-      photoPreview.innerHTML = "";
-      const imgEl = document.createElement("img");
-      imgEl.src = e.target.result;
-      photoPreview.appendChild(imgEl);
-      photoPreview.classList.add("has-image");
-      checkBackgroundBrightness(img);
-    };
-    img.src = e.target.result;
+  reader.onload = () => {
+    const dataUrl = reader.result;
+    const base64 = dataUrl.split(",")[1];
+    state.aiPendingImage = { base64, mediaType: file.type, previewUrl: dataUrl };
+    $("#aiImagePreview").src = dataUrl;
+    $("#aiImagePreviewWrap").classList.remove("hidden");
   };
   reader.readAsDataURL(file);
 });
-
-function checkBackgroundBrightness(img) {
-  // Heuristika: rasm burchaklaridagi piksellar yorqinligini o'lchaydi.
-  // 100% aniq emas — faqat taxminiy tekshiruv.
-  const canvas = document.createElement("canvas");
-  const w = (canvas.width = 60);
-  const h = (canvas.height = 60);
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(img, 0, 0, w, h);
-
-  const corners = [
-    ctx.getImageData(0, 0, 6, 6).data,
-    ctx.getImageData(w - 6, 0, 6, 6).data,
-    ctx.getImageData(0, h - 6, 6, 6).data,
-    ctx.getImageData(w - 6, h - 6, 6, 6).data,
-  ];
-
-  let total = 0;
-  let count = 0;
-  corners.forEach((data) => {
-    for (let i = 0; i < data.length; i += 4) {
-      total += (data[i] + data[i + 1] + data[i + 2]) / 3;
-      count++;
-    }
-  });
-  const brightness = total / count;
-  const warningEl = el("photoWarning");
-  if (brightness < 170) {
-    warningEl.hidden = false;
-    warningEl.classList.add("shake");
-    setTimeout(() => warningEl.classList.remove("shake"), 400);
-  } else {
-    warningEl.hidden = true;
-    bgWarningAccepted = true;
-  }
-}
-
-el("f_bio").addEventListener("input", (e) => {
-  el("bioCounter").textContent = `${e.target.value.length}/200`;
-});
-
-el("registerForm").addEventListener("submit", async (e) => {
-  e.preventDefault();
-
-  if (!CURRENT_TG_ID) {
-    showToast("Telegram orqali ochilishi kerak", "error");
-    return;
-  }
-  if (!selectedPhotoFile) {
-    showToast("Iltimos, rasm yuklang", "error");
-    return;
-  }
-  const warningEl = el("photoWarning");
-  if (!warningEl.hidden && !bgWarningAccepted) {
-    const proceed = confirm("Fon och emasga o'xshaydi. Baribir davom etamizmi?");
-    if (!proceed) return;
-    bgWarningAccepted = true;
-  }
-
-  const submitBtn = el("registerSubmit");
-  submitBtn.disabled = true;
-  const originalLabel = submitBtn.querySelector(".btn-label").textContent;
-  submitBtn.querySelector(".btn-label").textContent = "Yuborilmoqda...";
-
-  const formData = new FormData();
-  formData.append("telegram_id", CURRENT_TG_ID);
-  if (CURRENT_USERNAME) formData.append("telegram_username", CURRENT_USERNAME);
-  formData.append("full_name", el("f_full_name").value.trim());
-  formData.append("age", el("f_age").value);
-  formData.append("experience_years", el("f_experience").value);
-  formData.append("specialty", el("f_specialty").value);
-  formData.append("city", el("f_city").value);
-  formData.append("phone", el("f_phone").value.trim());
-  formData.append("price_info", el("f_price").value.trim());
-  formData.append("bio", el("f_bio").value.trim());
-  formData.append("photo", selectedPhotoFile);
-
-  try {
-    await apiFetch("/api/register", { method: "POST", body: formData });
-    submitBtn.classList.add("success");
-    submitBtn.querySelector(".btn-label").innerHTML = `<span class="stamp-pop">✅ Ro'yxatdan o'tdingiz!</span>`;
-    if (tg?.HapticFeedback) tg.HapticFeedback.notificationOccurred("success");
-    showToast("Siz endi mijozlarga ko'rinasiz!", "success");
-    e.target.reset();
-    photoPreview.innerHTML = `<span class="photo-placeholder-icon">📷</span><span class="photo-placeholder-text">Rasm yuklash</span>`;
-    photoPreview.classList.remove("has-image");
-    selectedPhotoFile = null;
-    el("bioCounter").textContent = "0/200";
-    setTimeout(() => {
-      submitBtn.classList.remove("success");
-      submitBtn.querySelector(".btn-label").textContent = originalLabel;
-      submitBtn.disabled = false;
-      el("registerModal").hidden = true;
-      loadMyMasters();
-      if (document.querySelector('.tab-panel#tab-masters.active')) loadMasters();
-    }, 1400);
-  } catch (err) {
-    showToast(err.message, "error");
-    submitBtn.disabled = false;
-    submitBtn.querySelector(".btn-label").textContent = originalLabel;
-  }
-});
-
-// ============================================================ profile ==
-
-async function loadProfileTab() {
-  if (!CURRENT_TG_ID) return;
-  await Promise.all([loadCustomerProfile(), loadPendingCalls(), loadMyMasters()]);
-}
-
-async function loadCustomerProfile() {
-  try {
-    customerProfile = await apiFetch(`/api/customers/${CURRENT_TG_ID}`);
-  } catch (_) {
-    customerProfile = null;
-  }
-  el("profileName").textContent = customerProfile?.full_name || CURRENT_NAME || "—";
-  el("profilePhone").textContent = customerProfile?.phone || "Telefon raqami yo'q";
-}
-
-async function loadPendingCalls() {
-  try {
-    const calls = await apiFetch(`/api/calls/pending/${CURRENT_TG_ID}`);
-    const list = el("callsList");
-    el("callsEmpty").hidden = calls.length > 0;
-    list.innerHTML = calls.map((c) => `
-      <div class="call-row" data-call-id="${c.id}">
-        <div class="call-row-icon">👤</div>
-        <div class="call-row-info">
-          <p class="call-row-name">${escapeHtml(c.customer_name || "Mijoz")}</p>
-          ${c.customer_username ? `<a class="call-row-link" href="https://t.me/${c.customer_username}" target="_blank">✈️ @${c.customer_username}</a>` : ""}
-          <div class="call-row-time">${timeAgo(c.created_at)}</div>
-        </div>
-        <button class="call-row-btn" data-call-id="${c.id}">✅ Tugatdim</button>
-      </div>
-    `).join("");
-
-    list.querySelectorAll(".call-row-btn").forEach((btn) => {
-      btn.addEventListener("click", () => finishCall(btn.dataset.callId));
-    });
-  } catch (err) {
-    showToast(err.message, "error");
-  }
-}
-
-async function finishCall(callId) {
-  const row = document.querySelector(`.call-row[data-call-id="${callId}"]`);
-  const formData = new FormData();
-  formData.append("master_telegram_id", CURRENT_TG_ID);
-  try {
-    await apiFetch(`/api/calls/${callId}/finish`, { method: "POST", body: formData });
-    if (row) {
-      row.classList.add("removing");
-      setTimeout(() => {
-        row.remove();
-        const remaining = document.querySelectorAll(".call-row").length;
-        el("callsEmpty").hidden = remaining > 0;
-      }, 350);
-    }
-    showToast("Mijozga baholash taklifi yuborildi", "success");
-  } catch (err) {
-    showToast(err.message, "error");
-  }
-}
-
-async function loadMyMasters() {
-  try {
-    const masters = await apiFetch(`/api/my-masters/${CURRENT_TG_ID}`);
-    const list = el("myMastersList");
-    el("myMastersEmpty").hidden = masters.length > 0;
-    list.innerHTML = masters.map((m) => `
-      <div class="my-master-row" data-master-id="${m.id}">
-        ${m.photo_path ? `<img class="my-master-photo" src="${m.photo_path}">` : `<div class="my-master-photo"></div>`}
-        <div class="my-master-info">
-          <p class="my-master-name">${escapeHtml(m.full_name)}</p>
-          <p class="my-master-meta">${escapeHtml(m.specialty_label)} · ⭐ ${m.avg_rating > 0 ? m.avg_rating.toFixed(1) : "—"} (${m.rating_count})</p>
-        </div>
-        <button class="delete-btn" data-master-id="${m.id}" title="O'chirish">🗑️</button>
-      </div>
-    `).join("");
-
-    list.querySelectorAll(".delete-btn").forEach((btn) => {
-      btn.addEventListener("click", () => deleteMaster(btn.dataset.masterId));
-    });
-  } catch (err) {
-    showToast(err.message, "error");
-  }
-}
-
-async function deleteMaster(masterId) {
-  if (!confirm("E'lonni o'chirishni tasdiqlaysizmi?")) return;
-  const formData = new FormData();
-  formData.append("telegram_id", CURRENT_TG_ID);
-  try {
-    await apiFetch(`/api/masters/${masterId}/delete`, { method: "POST", body: formData });
-    showToast("E'lon o'chirildi", "success");
-    loadMyMasters();
-  } catch (err) {
-    showToast(err.message, "error");
-  }
-}
-
-// ============================================================ ai chat ==
-
-function aiScrollToBottom() {
-  const box = el("aiMessages");
-  box.scrollTop = box.scrollHeight;
-}
-
-function renderAiMessage(role, html) {
-  const box = el("aiMessages");
-  const wrap = document.createElement("div");
-  wrap.className = `ai-msg ai-msg-${role === "user" ? "user" : "bot"}`;
-  wrap.innerHTML = `<div class="ai-msg-bubble">${html}</div>`;
-  box.appendChild(wrap);
-  aiScrollToBottom();
-  return wrap;
-}
-
-el("aiAttachBtn").addEventListener("click", () => el("aiImageInput").click());
-
-el("aiImageInput").addEventListener("change", () => {
-  const file = el("aiImageInput").files[0];
-  if (!file) return;
-  aiImageFile = file;
-  const reader = new FileReader();
-  reader.onload = (e) => {
-    el("aiImagePreviewImg").src = e.target.result;
-    el("aiImagePreview").hidden = false;
-  };
-  reader.readAsDataURL(file);
-});
-
-el("aiImageRemove").addEventListener("click", () => {
-  aiImageFile = null;
-  el("aiImageInput").value = "";
-  el("aiImagePreview").hidden = true;
+$("#aiImageRemove").addEventListener("click", () => {
+  state.aiPendingImage = null;
+  $("#aiImageInput").value = "";
+  $("#aiImagePreviewWrap").classList.add("hidden");
 });
 
 async function sendAiMessage() {
-  if (aiSending) return;
-  const input = el("aiTextInput");
+  const input = $("#aiTextInput");
   const text = input.value.trim();
-  if (!text && !aiImageFile) return;
+  if (!text && !state.aiPendingImage) return;
+  const img = state.aiPendingImage;
 
-  aiSending = true;
-  el("aiSendBtn").disabled = true;
-
-  let userHtml = escapeHtml(text);
-  if (aiImageFile) {
-    userHtml += `<br><img class="ai-msg-image" src="${el("aiImagePreviewImg").src}">`;
-  }
-  renderAiMessage("user", userHtml || "📷 rasm");
-
-  const loadingMsg = renderAiMessage("bot", `<span class="ai-typing">Yozmoqda...</span>`);
-
-  const formData = new FormData();
-  formData.append("message", text);
-  formData.append("history", JSON.stringify(aiHistory));
-  if (aiImageFile) formData.append("image", aiImageFile);
-
+  renderAiBubble("user", text || "(rasm yuborildi)", img ? img.previewUrl : null);
+  state.aiHistory.push({ role: "user", content: text || "Bu rasmda nima muammo bor?" });
   input.value = "";
-  const sentImageFile = aiImageFile;
-  aiImageFile = null;
-  el("aiImageInput").value = "";
-  el("aiImagePreview").hidden = true;
+  state.aiPendingImage = null;
+  $("#aiImageInput").value = "";
+  $("#aiImagePreviewWrap").classList.add("hidden");
 
+  const thinking = renderAiBubble("assistant thinking", "Yozmoqda...");
   try {
-    const result = await apiFetch("/api/ai/chat", { method: "POST", body: formData });
-    loadingMsg.remove();
-
-    let replyHtml = escapeHtml(result.reply).replace(/\n/g, "<br>");
-    const botMsgEl = renderAiMessage("bot", replyHtml);
-
-    aiHistory.push({ role: "user", content: text || "(rasm yubordi)" });
-    aiHistory.push({ role: "assistant", content: result.reply });
-
-    if (result.suggested_specialty) {
-      const btnWrap = document.createElement("div");
-      btnWrap.className = "ai-suggest-btn-wrap";
-      btnWrap.innerHTML = `<button class="ai-suggest-btn" data-key="${result.suggested_specialty}">🔍 ${escapeHtml(result.suggested_specialty_label)} ustalarini ko'rish</button>`;
-      botMsgEl.appendChild(btnWrap);
-      btnWrap.querySelector(".ai-suggest-btn").addEventListener("click", () => {
-        goToMastersTab(result.suggested_specialty);
-      });
-    }
-  } catch (err) {
-    loadingMsg.remove();
-    renderAiMessage("bot", `⚠️ ${escapeHtml(err.message)}`);
-  } finally {
-    aiSending = false;
-    el("aiSendBtn").disabled = false;
+    const res = await api("/api/ai/chat", {
+      method: "POST",
+      body: JSON.stringify({
+        messages: state.aiHistory,
+        image_base64: img ? img.base64 : null,
+        image_media_type: img ? img.mediaType : null,
+      }),
+    });
+    thinking.remove();
+    renderAiBubble("assistant", res.reply);
+    state.aiHistory.push({ role: "assistant", content: res.reply });
+  } catch (e) {
+    thinking.remove();
+    renderAiBubble("assistant", "Xatolik yuz berdi. Birozdan so'ng qayta urinib ko'ring.");
   }
 }
+$("#aiSendBtn").addEventListener("click", sendAiMessage);
+$("#aiTextInput").addEventListener("keydown", (e) => { if (e.key === "Enter") sendAiMessage(); });
 
-el("aiSendBtn").addEventListener("click", sendAiMessage);
-el("aiTextInput").addEventListener("keydown", (e) => {
-  if (e.key === "Enter") {
-    e.preventDefault();
-    sendAiMessage();
+// --------------------------------------------------------------- pro ----
+
+function renderProBenefits(benefits) {
+  $("#proBenefits").innerHTML = benefits.map((b) => `<li>${escapeHtml(b)}</li>`).join("");
+}
+
+function renderPro() {
+  $("#proPlans").innerHTML = state.proPlans.map((p, i) => `
+    <div class="pro-plan ${i === 1 ? "popular" : ""}" data-code="${p.code}">
+      <div>
+        <div class="pro-plan-name">${p.name}${i === 1 ? " · 🔥 Mashhur" : ""}</div>
+      </div>
+      <div class="pro-plan-price">${p.price_uzs.toLocaleString("ru-RU")} so'm</div>
+    </div>
+  `).join("");
+  $$(".pro-plan", $("#proPlans")).forEach((el) => el.addEventListener("click", () => requestPro(el.dataset.code)));
+}
+
+async function requestPro(planCode) {
+  if (!TG_ID) { toast("Botdan kirib, /start bosing"); return; }
+  const myMasters = await api(`/api/my-masters/${TG_ID}`).catch(() => []);
+  if (!myMasters.length) { toast("Avval Profil → Usta bo'lish orqali ro'yxatdan o'ting"); return; }
+  try {
+    await api("/api/pro/request", {
+      method: "POST",
+      body: JSON.stringify({ master_id: myMasters[0].id, plan_code: planCode, telegram_id: TG_ID }),
+    });
+    toast("So'rov yuborildi! Operator tez orada bog'lanadi 📨");
+  } catch (e) { toast(e.message); }
+}
+
+// ------------------------------------------------------------- profile ----
+
+$("#darkModeToggle").addEventListener("change", async (e) => {
+  state.userPrefs.dark_mode = e.target.checked ? 1 : 0;
+  applyTheme();
+  if (TG_ID) api(`/api/user/${TG_ID}/prefs`, { method: "POST", body: JSON.stringify({ dark_mode: state.userPrefs.dark_mode }) }).catch(() => {});
+});
+$("#animToggle").addEventListener("change", async (e) => {
+  state.userPrefs.animations = e.target.checked ? 1 : 0;
+  applyTheme();
+  if (TG_ID) api(`/api/user/${TG_ID}/prefs`, { method: "POST", body: JSON.stringify({ animations: state.userPrefs.animations }) }).catch(() => {});
+});
+
+api("/api/config").then((cfg) => {
+  $("#supportLink").href = `https://t.me/${cfg.support_username}`;
+}).catch(() => {});
+
+$("#becomeMasterBtn").addEventListener("click", () => {
+  if (!TG_ID) { toast("Botdan kirib, /start bosing"); return; }
+  $("#registerForm").reset();
+  $("#formErrors").classList.add("hidden");
+  $("#photoPreviewWrap").classList.add("hidden");
+  openModal("registerModal");
+});
+$("#registerCancelBtn").addEventListener("click", () => closeModal("registerModal"));
+
+$("#regPhoto").addEventListener("change", () => {
+  const file = $("#regPhoto").files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    $("#photoPreview").src = reader.result;
+    $("#photoPreviewWrap").classList.remove("hidden");
+    checkPhotoBrightness(reader.result);
+  };
+  reader.readAsDataURL(file);
+});
+
+function checkPhotoBrightness(dataUrl) {
+  const img = new Image();
+  img.onload = () => {
+    const canvas = document.createElement("canvas");
+    canvas.width = img.width; canvas.height = img.height;
+    const ctx = canvas.getContext("2d");
+    ctx.drawImage(img, 0, 0);
+    const corners = [
+      ctx.getImageData(0, 0, 1, 1).data,
+      ctx.getImageData(img.width - 1, 0, 1, 1).data,
+      ctx.getImageData(0, img.height - 1, 1, 1).data,
+      ctx.getImageData(img.width - 1, img.height - 1, 1, 1).data,
+    ];
+    const avg = corners.reduce((sum, c) => sum + (c[0] + c[1] + c[2]) / 3, 0) / corners.length;
+    $("#photoWarning").classList.toggle("hidden", avg >= 180);
+  };
+  img.src = dataUrl;
+}
+
+$("#registerForm").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const btn = $("#registerSubmitBtn");
+  btn.disabled = true; btn.textContent = "Yuborilmoqda...";
+  $("#formErrors").classList.add("hidden");
+  try {
+    const fd = new FormData(e.target);
+    fd.set("telegram_id", TG_ID);
+    fd.set("telegram_username", TG_USERNAME);
+    await api("/api/register", { method: "POST", body: fd });
+    closeModal("registerModal");
+    toast("✅ Ro'yxatdan muvaffaqiyatli o'tdingiz!");
+    loadMasters();
+  } catch (err) {
+    const el = $("#formErrors");
+    const lines = err.message.split("\n").filter(Boolean);
+    el.innerHTML = `<ul>${lines.map((l) => `<li>${escapeHtml(l)}</li>`).join("")}</ul>`;
+    el.classList.remove("hidden");
+  } finally {
+    btn.disabled = false; btn.textContent = "Yuborish";
   }
 });
 
-// ============================================================== init ==
+$("#myMastersBtn").addEventListener("click", async () => {
+  if (!TG_ID) { toast("Botdan kirib, /start bosing"); return; }
+  const block = $("#myMastersBlock");
+  block.classList.toggle("hidden");
+  $("#pendingCallsBlock").classList.add("hidden");
+  $("#favBlock").classList.add("hidden");
+  if (block.classList.contains("hidden")) return;
+  const list = await api(`/api/my-masters/${TG_ID}`);
+  $("#myMastersList").innerHTML = list.length ? list.map((m) => `
+    <div class="mini-master-row">
+      <img src="${m.photo_path}" alt="">
+      <div class="mini-master-info">
+        <div class="n">${escapeHtml(m.full_name)} <span class="master-code">${m.master_code}</span></div>
+        <div class="s">${specialtyOf(m.specialty).name} · ⭐ ${m.avg_rating ? m.avg_rating.toFixed(1) : "—"} (${m.rating_count})</div>
+      </div>
+      <button class="mini-btn danger" data-id="${m.id}">O'chirish</button>
+    </div>`).join("") : `<div class="empty-state"><p>Sizda hali e'lon yo'q</p></div>`;
+  $$(".mini-btn.danger", $("#myMastersList")).forEach((b) => b.addEventListener("click", async () => {
+    if (!confirm("E'lonni o'chirmoqchimisiz?")) return;
+    await api(`/api/masters/${b.dataset.id}/delete`, { method: "POST", body: JSON.stringify({ telegram_id: TG_ID }) });
+    toast("E'lon o'chirildi");
+    $("#myMastersBtn").click(); $("#myMastersBtn").click();
+    loadMasters();
+  }));
+});
+
+$("#pendingCallsBtn").addEventListener("click", async () => {
+  if (!TG_ID) { toast("Botdan kirib, /start bosing"); return; }
+  const block = $("#pendingCallsBlock");
+  block.classList.toggle("hidden");
+  $("#myMastersBlock").classList.add("hidden");
+  $("#favBlock").classList.add("hidden");
+  if (block.classList.contains("hidden")) return;
+  await refreshPendingCalls();
+});
+
+async function refreshPendingCalls() {
+  if (!TG_ID) return;
+  const list = await api(`/api/calls/pending/${TG_ID}`);
+  $("#pendingBadge").textContent = list.length;
+  $("#pendingBadge").classList.toggle("hidden", list.length === 0);
+  $("#pendingCallsList").innerHTML = list.length ? list.map((c) => `
+    <div class="mini-master-row">
+      <div class="mini-master-info">
+        <div class="n">👤 ${escapeHtml(c.customer_name || "Mijoz")}</div>
+        <div class="s">📞 ${escapeHtml(c.customer_phone || "—")} ${c.customer_username ? "· @" + escapeHtml(c.customer_username) : ""}</div>
+        ${c.note ? `<div class="call-note-text">📝 ${escapeHtml(c.note)}</div>` : ""}
+      </div>
+      <button class="mini-btn finish" data-id="${c.id}">✅ Tugatdim</button>
+    </div>`).join("") : `<div class="empty-state"><p>Hozircha kutilayotgan chaqiruv yo'q</p></div>`;
+  $$(".mini-btn.finish", $("#pendingCallsList")).forEach((b) => b.addEventListener("click", async () => {
+    await api(`/api/calls/${b.dataset.id}/finish`, { method: "POST", body: JSON.stringify({ master_telegram_id: TG_ID }) });
+    toast("Chaqiruv yakunlandi ✅");
+    refreshPendingCalls();
+  }));
+}
+
+$("#favMenuBtn").addEventListener("click", async () => {
+  if (!TG_ID) { toast("Botdan kirib, /start bosing"); return; }
+  const block = $("#favBlock");
+  block.classList.toggle("hidden");
+  $("#myMastersBlock").classList.add("hidden");
+  $("#pendingCallsBlock").classList.add("hidden");
+  if (block.classList.contains("hidden")) return;
+  const list = await api(`/api/favorites/${TG_ID}`);
+  $("#favList").innerHTML = list.length ? list.map((m) => `
+    <div class="mini-master-row">
+      <img src="${m.photo_path}" alt="">
+      <div class="mini-master-info">
+        <div class="n">${escapeHtml(m.full_name)}</div>
+        <div class="s">${specialtyOf(m.specialty).name} · ${m.city}</div>
+      </div>
+    </div>`).join("") : `<div class="empty-state"><p>Saqlangan usta yo'q</p></div>`;
+});
+
+$("#favToggleBtn").addEventListener("click", () => { switchView("profile"); $("#favMenuBtn").click(); });
+
+// ------------------------------------------------------------ deep link ----
 
 function handleDeepLink() {
   const params = new URLSearchParams(window.location.search);
-  let tab = params.get("tab");
-  // eski deep-linklar bilan moslik
-  if (tab === "search") tab = "masters";
-  if (tab === "register") {
-    setActiveTabVisual("profile");
-    loadProfileTab();
-    el("registerModal").hidden = false;
-    return;
-  }
-  if (tab === "masters" || tab === "ai" || tab === "pro" || tab === "profile") {
-    setActiveTabVisual(tab);
-    if (tab === "profile") loadProfileTab();
+  const startParam = tg && tg.initDataUnsafe ? tg.initDataUnsafe.start_param : null;
+  const tab = params.get("tab") || startParam;
+  const masterId = params.get("master_id");
+  if (tab === "rate" && masterId) {
+    openRateModal(Number(masterId));
+  } else if (tab === "profile") {
+    switchView("profile");
   }
 }
+
+// ------------------------------------------------------------------ init ----
 
 async function init() {
-  setActiveTabVisual("masters", false);
-  await loadReferenceData();
+  await loadUser();
+  await loadReference();
+  await loadFavorites();
   await loadMasters();
+  if (TG_ID) refreshPendingCalls().then(() => {}).catch(() => {});
   handleDeepLink();
 }
-
 init();

@@ -1,35 +1,26 @@
-# -*- coding: utf-8 -*-
-"""Ustak — aiogram 3.x bot (polling rejimida).
+# bot.py
+"""
+USTAK Telegram bot (aiogram 3.x, polling rejimida).
 
 Oqim:
-1. /start bosilganda — agar mijoz kontaktini hali ulashmagan bo'lsa, kontakt
-   ulashish majburiy (boshqa hech narsa qilib bo'lmaydi).
-2. Kontakt ulashilgach — bitta tugma: "Ustak'ni ochish" (Mini App).
-3. Mini App ichida hammasi: Ustalar / AI Yordamchi / Pro / Profil (usta
-   bo'lish ham shu yerda, Profil bo'limida).
+  /start -> agar foydalanuvchi hali kontakt ulashmagan bo'lsa, majburiy ravishda
+            "📱 Raqamni ulashish" tugmasi ko'rsatiladi (boshqa hech narsa qabul qilinmaydi).
+  Kontakt ulashilgach -> foydalanuvchi bazaga yoziladi va ikkita tugma chiqadi:
+            🚀 Ilovani ochish (WebApp)   💬 Yordam / Qo'llab-quvvatlash
+  Admin uchun: /pro_confirm <USTA_KODI> <kunlar_soni> — PRO obunani qo'lda faollashtiradi.
 """
 
 import asyncio
 import logging
 import os
 
-from dotenv import load_dotenv
-
-load_dotenv()
-
 from aiogram import Bot, Dispatcher, F
 from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
-from aiogram.filters import CommandStart
+from aiogram.filters import Command, CommandObject
 from aiogram.types import (
-    Message,
-    CallbackQuery,
-    InlineKeyboardMarkup,
-    InlineKeyboardButton,
-    ReplyKeyboardMarkup,
-    ReplyKeyboardRemove,
-    KeyboardButton,
-    WebAppInfo,
+    Message, ReplyKeyboardMarkup, KeyboardButton, ReplyKeyboardRemove,
+    InlineKeyboardMarkup, InlineKeyboardButton, WebAppInfo,
 )
 
 from backend import database as db
@@ -39,145 +30,121 @@ logger = logging.getLogger("ustak-bot")
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 WEBAPP_URL = os.environ.get("WEBAPP_URL", "")
+SUPPORT_USERNAME = os.environ.get("SUPPORT_USERNAME", "ustak_support")
+ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "").replace(" ", "").split(",") if x]
 
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML)) if BOT_TOKEN else None
 dp = Dispatcher()
 
-
-def contact_request_keyboard() -> ReplyKeyboardMarkup:
-    return ReplyKeyboardMarkup(
-        keyboard=[[KeyboardButton(text="📞 Kontaktni ulashish", request_contact=True)]],
-        resize_keyboard=True,
-        one_time_keyboard=True,
-    )
+CONTACT_KB = ReplyKeyboardMarkup(
+    keyboard=[[KeyboardButton(text="📱 Raqamni ulashish", request_contact=True)]],
+    resize_keyboard=True,
+    one_time_keyboard=True,
+)
 
 
-def webapp_keyboard() -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup(
-        inline_keyboard=[
-            [InlineKeyboardButton(text="🧰 Ustak'ni ochish", web_app=WebAppInfo(url=WEBAPP_URL))],
-        ]
-    )
+def main_menu_kb() -> InlineKeyboardMarkup:
+    rows = []
+    if WEBAPP_URL:
+        rows.append([InlineKeyboardButton(text="🚀 Ilovani ochish", web_app=WebAppInfo(url=WEBAPP_URL))])
+    rows.append([InlineKeyboardButton(text="💬 Yordam / Qo'llab-quvvatlash", url=f"https://t.me/{SUPPORT_USERNAME}")])
+    return InlineKeyboardMarkup(inline_keyboard=rows)
 
 
-def is_registered(telegram_id: int) -> bool:
-    customer = db.get_customer(telegram_id)
-    return bool(customer and customer["phone"])
+WELCOME_TEXT = (
+    "👋 <b>USTAK</b>ga xush kelibsiz!\n\n"
+    "🛠 Bu yerda siz santexnik, elektrik, payvandchi va boshqa mahalliy ustalarni "
+    "tez topib, ular bilan to'g'ridan-to'g'ri bog'lanishingiz mumkin.\n\n"
+    "Davom etish uchun avval telefon raqamingizni ulashing — bu ustalar siz bilan "
+    "bog'lana olishi uchun kerak."
+)
+
+READY_TEXT = (
+    "✅ Rahmat! Endi <b>USTAK</b> ilovasidan to'liq foydalanishingiz mumkin.\n\n"
+    "🛠 <b>Ustalar</b> — soha va hudud bo'yicha usta qidiring\n"
+    "🤖 <b>AI Yordamchi</b> — muammoingizni tasvirlab bering yoki rasm yuboring, "
+    "qaysi usta kerakligini aytib beradi\n"
+    "⭐ <b>Pro obuna</b> — ustalar uchun qidiruvda yuqorida chiqish imkoniyati\n"
+    "👤 <b>Profil</b> — sozlamalar, usta bo'lish va qo'llab-quvvatlash"
+)
 
 
-@dp.message(CommandStart())
-async def cmd_start(message: Message) -> None:
-    if not is_registered(message.from_user.id):
-        await message.answer(
-            f"👋 Assalomu alaykum, {message.from_user.first_name}!\n\n"
-            "<b>Ustak</b> — mahalliy ustalarni topish va AI yordamchidan maslahat olish uchun ilova.\n\n"
-            "Davom etish uchun, iltimos, pastdagi tugma orqali kontaktingizni ulashing 👇",
-            reply_markup=contact_request_keyboard(),
-        )
+@dp.message(Command("start"))
+async def cmd_start(message: Message):
+    user = db.get_user(message.from_user.id)
+    if user and user.get("phone"):
+        await message.answer(READY_TEXT, reply_markup=main_menu_kb())
         return
-
-    await message.answer(
-        f"👋 Xush kelibsiz, {message.from_user.first_name}!\n\n"
-        "Quyidagi tugma orqali <b>Ustak</b> ilovasini oching 👇",
-        reply_markup=webapp_keyboard(),
-    )
+    await message.answer(WELCOME_TEXT, reply_markup=CONTACT_KB)
 
 
 @dp.message(F.contact)
-async def on_contact(message: Message) -> None:
+async def on_contact(message: Message):
     contact = message.contact
-    # Faqat o'zining kontaktini qabul qilamiz
     if contact.user_id and contact.user_id != message.from_user.id:
-        await message.answer("Iltimos, faqat o'zingizning kontaktingizni ulashing.")
+        await message.answer(
+            "⚠️ Iltimos, o'zingizning shaxsiy raqamingizni ulashing.",
+            reply_markup=CONTACT_KB,
+        )
         return
 
-    full_name = " ".join(filter(None, [contact.first_name, contact.last_name])) or message.from_user.first_name
-
-    db.upsert_customer(
+    db.upsert_user_contact(
         telegram_id=message.from_user.id,
-        telegram_username=message.from_user.username,
-        full_name=full_name,
+        username=message.from_user.username or "",
+        full_name=message.from_user.full_name or "",
         phone=contact.phone_number,
     )
-
-    await message.answer(
-        "✅ Rahmat! Endi <b>Ustak</b> ilovasidan foydalanishingiz mumkin.",
-        reply_markup=ReplyKeyboardRemove(),
-    )
-    await message.answer(
-        "Quyidagi tugma orqali ilovani oching 👇",
-        reply_markup=webapp_keyboard(),
-    )
+    await message.answer(READY_TEXT, reply_markup=ReplyKeyboardRemove())
+    await message.answer("👇 Boshlash uchun ilovani oching:", reply_markup=main_menu_kb())
 
 
-@dp.message(F.text == "/help")
-async def cmd_help(message: Message) -> None:
-    await message.answer(
-        "ℹ️ <b>Ustak</b> — mahalliy ustalarni topish va AI yordamchidan maslahat olish uchun bot.\n"
-        "/start — ilovani ochish"
-    )
-
-
-@dp.callback_query(F.data.startswith("rate:"))
-async def on_rate_feedback(callback: CallbackQuery) -> None:
-    """Mijoz 👍/👎 bosganda ishlaydi — usta ish tugagandan 10 daqiqa
-    keyin yuborilgan fikr-mulohaza xabaridagi tugmalar."""
-    parts = (callback.data or "").split(":")
-    if len(parts) != 3:
-        await callback.answer()
+@dp.message(Command("pro_confirm"))
+async def cmd_pro_confirm(message: Message, command: CommandObject):
+    if message.from_user.id not in ADMIN_IDS:
         return
-
-    _, direction, master_id_str = parts
-    try:
-        master_id = int(master_id_str)
-    except ValueError:
-        await callback.answer()
+    if not command.args:
+        await message.answer("Foydalanish: /pro_confirm US-1001 30")
         return
-
-    customer_id = callback.from_user.id
-
-    if db.has_rated(master_id, customer_id):
-        await callback.answer("Siz bu ustaga allaqachon fikr bildirgansiz 🙏", show_alert=True)
+    parts = command.args.split()
+    if len(parts) != 2 or not parts[1].isdigit():
+        await message.answer("Foydalanish: /pro_confirm US-1001 30")
         return
-
-    stars = 5 if direction == "up" else 2
-    db.insert_rating(master_id, customer_id, stars, None)
-
-    if direction == "up":
-        thank_you = "Ajoyib! Fikringiz uchun rahmat 😊🤝"
-    else:
-        thank_you = "Fikringiz uchun rahmat 🙏 Keyingi safar yaxshiroq bo'lishiga harakat qilamiz."
-
-    try:
-        if callback.message:
-            await callback.message.edit_text(thank_you, reply_markup=None)
-    except Exception:
-        pass
-    await callback.answer("Rahmat!")
+    code, days = parts[0], int(parts[1])
+    master = db.get_master_by_code(code)
+    if not master:
+        await message.answer(f"❌ {code} kodli usta topilmadi")
+        return
+    db.set_master_pro(master["id"], days)
+    await message.answer(f"✅ {master['full_name']} ({code}) uchun PRO {days} kunga faollashtirildi")
+    await bot.send_message(
+        master["telegram_id"],
+        f"🎉 Tabriklaymiz! Sizning <b>PRO</b> obunangiz {days} kunga faollashtirildi.\n"
+        f"Endi qidiruv natijalarida eng yuqorida chiqasiz.",
+    )
 
 
 @dp.message()
-async def on_any_message(message: Message) -> None:
-    """Kontakt ulashilmaguncha bot bilan boshqa hech narsa qilib bo'lmaydi."""
-    if not is_registered(message.from_user.id):
+async def fallback(message: Message):
+    user = db.get_user(message.from_user.id)
+    if not user or not user.get("phone"):
         await message.answer(
-            "Davom etishdan oldin, iltimos, kontaktingizni ulashing 👇",
-            reply_markup=contact_request_keyboard(),
+            "Davom etish uchun avval telefon raqamingizni ulashing 👇",
+            reply_markup=CONTACT_KB,
         )
         return
     await message.answer(
-        "Ilovani ochish uchun tugmani bosing 👇",
-        reply_markup=webapp_keyboard(),
+        "Ilovani ochish uchun quyidagi tugmadan foydalaning 👇",
+        reply_markup=main_menu_kb(),
     )
 
 
-async def run_bot() -> None:
-    if not BOT_TOKEN:
-        logger.warning("BOT_TOKEN topilmadi — bot ishga tushmaydi.")
+async def start_bot():
+    if not bot:
+        logger.warning("BOT_TOKEN topilmadi — bot ishga tushmaydi (faqat API server ishlaydi).")
         return
-    bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
-    await bot.delete_webhook(drop_pending_updates=True)
+    db.init_db()
     await dp.start_polling(bot)
 
 
 if __name__ == "__main__":
-    asyncio.run(run_bot())
+    asyncio.run(start_bot())

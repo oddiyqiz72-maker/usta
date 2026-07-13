@@ -1,45 +1,52 @@
-# -*- coding: utf-8 -*-
-"""Ustak — doimiy ro'yxatlar: sohalar va hududlar."""
+# backend/constants.py
+"""
+USTAK — sohalar (SPECIALTIES) va hududlar (CITIES) ro'yxati.
+Har bir soha uchun: kod, nomi, emoji, va rang belgisi (webapp'da chip/badge uchun).
+Rang kodlari master kartochkalarida va "adashib ketmaslik" uchun ID belgisida ishlatiladi.
+"""
 
-# key -> (nomi, emoji)  — eski (real ishlab turgan) loyihadagi ro'yxat bilan bir xil
-SPECIALTIES = {
-    "santexnik": ("Santexnik", "🔧"),
-    "elektrik": ("Elektrik", "⚡"),
-    "payvandchi": ("Payvandchi", "🔗"),
-    "boyoqchi": ("Bo'yoqchi", "🎨"),
-    "duradgor": ("Duradgor (yog'och usta)", "🪚"),
-    "qurilishchi": ("Qurilishchi / Betonchi", "🧱"),
-    "kafelchi": ("Kafelchi", "🀄"),
-    "konditsioner": ("Konditsioner / Muzlatgich ustasi", "🧊"),
-    "mebel": ("Mebel yig'uvchi", "🛋️"),
-    "kompyuter": ("Kompyuter / Telefon ustasi", "💻"),
-    "avtomexanik": ("Avtomexanik", "🚗"),
-    "gazchi": ("Gaz-plita ustasi", "🔥"),
-    "boshqa": ("Boshqa", "🧰"),
-}
-
-# Eski (real) loyihadagi hudud ro'yxati bilan bir xil
-CITIES = [
-    "Toshkent shahri",
-    "Toshkent viloyati",
-    "Andijon",
-    "Farg'ona",
-    "Namangan",
-    "Samarqand",
-    "Buxoro",
-    "Navoiy",
-    "Qashqadaryo",
-    "Surxondaryo",
-    "Jizzax",
-    "Sirdaryo",
-    "Xorazm",
-    "Qoraqalpog'iston",
+SPECIALTIES = [
+    {"code": "santexnik", "name": "Santexnik", "emoji": "🔧", "color": "#3E7CB1"},
+    {"code": "elektrik", "name": "Elektrik", "emoji": "⚡", "color": "#C98A3D"},
+    {"code": "payvandchi", "name": "Payvandchi", "emoji": "🔥", "color": "#B5482E"},
+    {"code": "montajchi", "name": "Montajchi", "emoji": "🪛", "color": "#5C8A5C"},
+    {"code": "duradgor", "name": "Duradgor", "emoji": "🪚", "color": "#8B5E3C"},
+    {"code": "bo'yoqchi", "name": "Bo'yoqchi", "emoji": "🎨", "color": "#7B5EA7"},
+    {"code": "kafelchi", "name": "Kafelchi", "emoji": "🧱", "color": "#A85C6B"},
+    {"code": "gazchi", "name": "Gaz ustasi", "emoji": "🔵", "color": "#2E8B77"},
+    {"code": "konditsioner", "name": "Konditsioner ustasi", "emoji": "❄️", "color": "#3E9CB1"},
+    {"code": "santexnik-vannaxona", "name": "Vannaxona ustasi", "emoji": "🚿", "color": "#4A7FA6"},
+    {"code": "eshik-deraza", "name": "Eshik/Deraza ustasi", "emoji": "🚪", "color": "#7A6A4F"},
+    {"code": "quruvchi", "name": "Quruvchi", "emoji": "🏗️", "color": "#6B6B6B"},
+    {"code": "santexnik-isitish", "name": "Isitish tizimi ustasi", "emoji": "♨️", "color": "#C9622E"},
+    {"code": "mebel", "name": "Mebel yig'uvchi", "emoji": "🪑", "color": "#8A7248"},
+    {"code": "boshqa", "name": "Boshqa xizmatlar", "emoji": "🛠️", "color": "#7A7A7A"},
 ]
 
+SPECIALTY_MAP = {s["code"]: s for s in SPECIALTIES}
 
-def specialty_label(key: str) -> str:
-    item = SPECIALTIES.get(key)
-    if not item:
-        return key
-    name, emoji = item
-    return f"{emoji} {name}"
+CITIES = [
+    "Toshkent shahri", "Andijon", "Buxoro", "Farg'ona", "Jizzax",
+    "Xorazm", "Namangan", "Navoiy", "Qashqadaryo", "Qoraqalpog'iston",
+    "Samarqand", "Sirdaryo", "Surxondaryo", "Toshkent viloyati",
+]
+
+# Foydalanuvchi/ustaga tegishli validatsiya chegaralari
+AGE_MIN, AGE_MAX = 16, 90
+EXPERIENCE_MIN, EXPERIENCE_MAX = 0, 70
+BIO_MAX_LEN = 220
+
+# Pro obuna narxlari (namoyish uchun, to'lov integratsiyasi keyinroq ulanadi)
+PRO_PLANS = [
+    {"code": "oylik", "name": "1 oylik", "price_uzs": 29000, "days": 30},
+    {"code": "chorak", "name": "3 oylik", "price_uzs": 75000, "days": 90},
+    {"code": "yillik", "name": "1 yillik", "price_uzs": 249000, "days": 365},
+]
+
+PRO_BENEFITS = [
+    "Qidiruv natijalarida eng yuqorida chiqasiz",
+    "Profilingizda oltin \"PRO\" nishon bo'ladi",
+    "Cheklovsiz rasm yuklash imkoniyati",
+    "Haftalik statistika: ko'rishlar, chaqiruvlar, reyting dinamikasi",
+    "AI Yordamchi tavsiyalarida ustuvor tavsiya etilasiz",
+]
