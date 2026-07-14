@@ -1,6 +1,6 @@
 # backend/constants.py
 """
-USTAK — sohalar (SPECIALTIES) va hududlar (CITIES) ro'yxati.
+UstaKerak — sohalar (SPECIALTIES) va hududlar (CITIES) ro'yxati.
 Har bir soha uchun: kod, nomi, emoji, va rang belgisi (webapp'da chip/badge uchun).
 Rang kodlari master kartochkalarida va "adashib ketmaslik" uchun ID belgisida ishlatiladi.
 """
@@ -36,17 +36,3 @@ AGE_MIN, AGE_MAX = 16, 90
 EXPERIENCE_MIN, EXPERIENCE_MAX = 0, 70
 BIO_MAX_LEN = 220
 
-# Pro obuna narxlari (namoyish uchun, to'lov integratsiyasi keyinroq ulanadi)
-PRO_PLANS = [
-    {"code": "oylik", "name": "1 oylik", "price_uzs": 29000, "days": 30},
-    {"code": "chorak", "name": "3 oylik", "price_uzs": 75000, "days": 90},
-    {"code": "yillik", "name": "1 yillik", "price_uzs": 249000, "days": 365},
-]
-
-PRO_BENEFITS = [
-    "Qidiruv natijalarida eng yuqorida chiqasiz",
-    "Profilingizda oltin \"PRO\" nishon bo'ladi",
-    "Cheklovsiz rasm yuklash imkoniyati",
-    "Haftalik statistika: ko'rishlar, chaqiruvlar, reyting dinamikasi",
-    "AI Yordamchi tavsiyalarida ustuvor tavsiya etilasiz",
-]

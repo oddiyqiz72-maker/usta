@@ -1,6 +1,6 @@
 # backend/database.py
 """
-USTAK — SQLite bilan ishlash qatlami.
+UstaKerak — SQLite bilan ishlash qatlami.
 Xom SQL ishlatiladi (ORM yo'q). Barcha yozish amallari thread-safe lock bilan himoyalangan,
 chunki FastAPI + aiogram bitta jarayonda (run.py) ishlaydi va bir nechta thread/async task
 bir vaqtda bazaga murojaat qilishi mumkin.
@@ -59,8 +59,6 @@ def init_db():
             price_info TEXT,
             bio TEXT,
             photo_path TEXT,
-            is_pro INTEGER DEFAULT 0,
-            pro_until TEXT,
             created_at TEXT,
             is_active INTEGER DEFAULT 1
         )
@@ -199,7 +197,7 @@ def search_masters(specialty: str = None, city: str = None, search: str = None):
     if search:
         q += " AND m.full_name LIKE ?"
         params.append(f"%{search}%")
-    q += " GROUP BY m.id ORDER BY m.is_pro DESC, avg_rating DESC, m.created_at DESC"
+    q += " GROUP BY m.id ORDER BY avg_rating DESC, m.created_at DESC"
     rows = conn.execute(q, params).fetchall()
     conn.close()
     return [dict(r) for r in rows]
@@ -232,24 +230,6 @@ def delete_master(master_id: int, telegram_id: int) -> bool:
         conn.commit()
         conn.close()
         return True
-
-
-def get_master_by_code(master_code: str):
-    conn = get_conn()
-    row = conn.execute("SELECT * FROM masters WHERE master_code=?", (master_code,)).fetchone()
-    conn.close()
-    return dict(row) if row else None
-
-
-def set_master_pro(master_id: int, days: int):
-    with _lock:
-        conn = get_conn()
-        conn.execute(
-            "UPDATE masters SET is_pro=1, pro_until=datetime('now', ?) WHERE id=?",
-            (f"+{days} days", master_id)
-        )
-        conn.commit()
-        conn.close()
 
 
 # ---------------------------------------------------------------- calls ----

@@ -1,6 +1,6 @@
 # backend/ai.py
 """
-USTAK AI Yordamchi.
+UstaKerak AI Yordamchi.
 Anthropic API (Claude) orqali ishlaydigan yordamchi:
   - Bot va ilova haqida savollarga javob beradi
   - Foydalanuvchi tasvirlagan muammo asosida qaysi usta kerakligini tavsiya qiladi
@@ -18,8 +18,8 @@ ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
 MODEL = "claude-sonnet-4-6"
 
-SYSTEM_PROMPT = f"""Sen "USTAK" Telegram Mini App ilovasining AI Yordamchisisan.
-USTAK — O'zbekistonda mahalliy ustalarni (santexnik, elektrik, payvandchi va h.k.) topish
+SYSTEM_PROMPT = f"""Sen "UstaKerak" Telegram Mini App ilovasining AI Yordamchisisan.
+UstaKerak — O'zbekistonda mahalliy ustalarni (santexnik, elektrik, payvandchi va h.k.) topish
 va ular bilan bog'lanish uchun xizmat. Sening vazifalaring:
 
 1. Ilova qanday ishlashini tushuntirish: foydalanuvchi "Ustalar" bo'limida soha va hudud

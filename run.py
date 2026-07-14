@@ -1,6 +1,6 @@
 # run.py
 """
-USTAK — bot va FastAPI serverni BITTA jarayonda birga ishga tushiradi.
+UstaKerak — bot va FastAPI serverni BITTA jarayonda birga ishga tushiradi.
 Render.com "Web Service" bitta portni kutadi (PORT muhit o'zgaruvchisi),
 shuning uchun bot polling va API server bitta asyncio loop ichida
 asyncio.gather bilan parallel ishlaydi.

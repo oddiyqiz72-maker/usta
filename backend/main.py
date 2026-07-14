@@ -1,6 +1,6 @@
 # backend/main.py
 """
-USTAK — FastAPI ilovasi.
+UstaKerak — FastAPI ilovasi.
 Barcha API endpointlar + webapp statik fayllarini xizmat qiladi.
 Bot bilan bitta jarayonda (run.py, asyncio.gather) ishga tushadi.
 """
@@ -13,20 +13,20 @@ from typing import Optional
 import httpx
 from fastapi import FastAPI, Form, File, UploadFile, HTTPException, Body
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
 from backend import database as db
 from backend.constants import (
     SPECIALTIES, SPECIALTY_MAP, CITIES, AGE_MIN, AGE_MAX,
-    EXPERIENCE_MIN, EXPERIENCE_MAX, BIO_MAX_LEN, PRO_PLANS, PRO_BENEFITS,
+    EXPERIENCE_MIN, EXPERIENCE_MAX, BIO_MAX_LEN,
 )
 from backend import ai as ai_module
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN", "")
 ADMIN_IDS = [int(x) for x in os.environ.get("ADMIN_IDS", "").replace(" ", "").split(",") if x]
-SUPPORT_USERNAME = os.environ.get("SUPPORT_USERNAME", "ustak_support")
+SUPPORT_USERNAME = os.environ.get("SUPPORT_USERNAME", "ustakerak_support")
 WEBAPP_URL = os.environ.get("WEBAPP_URL", "")
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -34,7 +34,7 @@ WEBAPP_DIR = os.path.join(BASE_DIR, "webapp")
 UPLOADS_DIR = os.path.join(WEBAPP_DIR, "uploads")
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
-app = FastAPI(title="USTAK API")
+app = FastAPI(title="UstaKerak API")
 app.add_middleware(
     CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"],
 )
@@ -85,9 +85,37 @@ def get_config():
     return {"support_username": SUPPORT_USERNAME}
 
 
-@app.get("/api/pro-plans")
-def get_pro_plans():
-    return {"plans": PRO_PLANS, "benefits": PRO_BENEFITS}
+@app.get("/api/user/{telegram_id}/photo")
+async def api_user_photo(telegram_id: int):
+    """Foydalanuvchining Telegram profil rasmini bot orqali olib, proksi qiladi."""
+    if not BOT_TOKEN:
+        raise HTTPException(404, "Rasm topilmadi")
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            r1 = await client.get(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/getUserProfilePhotos",
+                params={"user_id": telegram_id, "limit": 1},
+            )
+            data1 = r1.json()
+            photos = data1.get("result", {}).get("photos", [])
+            if not photos:
+                raise HTTPException(404, "Rasm topilmadi")
+            file_id = photos[0][-1]["file_id"]
+
+            r2 = await client.get(
+                f"https://api.telegram.org/bot{BOT_TOKEN}/getFile",
+                params={"file_id": file_id},
+            )
+            file_path = r2.json().get("result", {}).get("file_path")
+            if not file_path:
+                raise HTTPException(404, "Rasm topilmadi")
+
+            r3 = await client.get(f"https://api.telegram.org/file/bot{BOT_TOKEN}/{file_path}")
+            return Response(content=r3.content, media_type="image/jpeg")
+    except HTTPException:
+        raise
+    except Exception:
+        raise HTTPException(404, "Rasm topilmadi")
 
 
 # ---------------------------------------------------------------- users ----
@@ -316,33 +344,6 @@ def api_toggle_favorite(customer_telegram_id: int = Body(...), master_id: int = 
 @app.get("/api/favorites/{telegram_id}")
 def api_get_favorites(telegram_id: int):
     return db.get_favorites(telegram_id)
-
-
-# --------------------------------------------------------------- pro ----
-
-@app.post("/api/pro/request")
-async def api_pro_request(master_id: int = Body(...), plan_code: str = Body(...), telegram_id: int = Body(...)):
-    master = db.get_master(master_id)
-    plan = next((p for p in PRO_PLANS if p["code"] == plan_code), None)
-    if not master or not plan:
-        raise HTTPException(404, "Ma'lumot topilmadi")
-    if master["telegram_id"] != telegram_id:
-        raise HTTPException(403, "Ruxsat yo'q")
-
-    for admin_id in ADMIN_IDS:
-        await tg_send_message(
-            admin_id,
-            f"💳 <b>Yangi PRO so'rov</b>\n"
-            f"Usta: {master['full_name']} ({master['master_code']})\n"
-            f"Reja: {plan['name']} — {plan['price_uzs']:,} so'm\n"
-            f"Tasdiqlash: <code>/pro_confirm {master['master_code']} {plan['days']}</code>",
-        )
-    await tg_send_message(
-        telegram_id,
-        f"📨 PRO obuna so'rovingiz ({plan['name']}) qabul qilindi. "
-        f"To'lov bo'yicha tez orada operator siz bilan bog'lanadi.",
-    )
-    return {"ok": True}
 
 
 # ------------------------------------------------------------------ AI ----

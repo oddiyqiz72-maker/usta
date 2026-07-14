@@ -1,4 +1,4 @@
-# USTAK — Mahalliy ustalarni topish Telegram Mini App (v2)
+# UstaKerak — Mahalliy ustalarni topish Telegram Mini App (v2)
 
 To'liq qayta yozilgan versiya: yangi dizayn (to'q ko'mir-ko'k + jez/zumrad palitra),
 4 bo'limli pastki navigatsiya (**Ustalar · AI Yordamchi · Pro obuna · Profil**),
@@ -26,7 +26,7 @@ majburiy kontakt ulashish, va AI yordamchi (matn + rasm orqali).
 ## Fayl tuzilishi
 
 ```
-usta-bot/
+ustakerak-bot/
 ├── backend/
 │   ├── main.py       → FastAPI: barcha API + webapp statik fayllar
 │   ├── database.py   → SQLite (xom SQL)

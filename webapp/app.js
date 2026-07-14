@@ -1,5 +1,5 @@
 // ===========================================================
-// USTAK — webapp frontend logic (vanilla JS)
+// UstaKerak — webapp frontend logic (vanilla JS)
 // ===========================================================
 const tg = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
 if (tg) { tg.ready(); tg.expand(); }
@@ -23,7 +23,6 @@ const state = {
   aiPendingImage: null, // {base64, mediaType, previewUrl}
   currentCallMaster: null,
   currentRateMaster: null,
-  proPlans: [],
   userPrefs: { dark_mode: 1, animations: 1 },
 };
 
@@ -79,6 +78,7 @@ function applyTheme() {
 }
 
 async function loadUser() {
+  applyProfileAvatar();
   if (!TG_ID) return;
   try {
     const user = await api(`/api/user/${TG_ID}`);
@@ -93,6 +93,21 @@ async function loadUser() {
   applyTheme();
 }
 
+function applyProfileAvatar() {
+  const img = $("#profileAvatarImg");
+  const fallback = $("#profileAvatarFallback");
+  const showIfLoads = (src) => {
+    img.onload = () => { img.classList.remove("hidden"); fallback.classList.add("hidden"); };
+    img.onerror = () => { img.classList.add("hidden"); fallback.classList.remove("hidden"); };
+    img.src = src;
+  };
+  if (TG_ID) {
+    showIfLoads(`/api/user/${TG_ID}/photo`);
+  } else if (tgUser && tgUser.photo_url) {
+    showIfLoads(tgUser.photo_url);
+  }
+}
+
 // -------------------------------------------------------------- tabs ----
 
 function switchView(name) {
@@ -100,13 +115,11 @@ function switchView(name) {
   $(`#view-${name}`).classList.remove("hidden");
   $$(".nav-btn").forEach((b) => b.classList.toggle("active", b.dataset.view === name));
   const subs = {
-    masters: "ustangizni toping",
+    masters: "tezkor usta chaqiruv",
     ai: "aqlli yordamchi",
-    pro: "ustalar uchun",
     profile: "sozlamalar",
   };
   $("#brandSub").textContent = subs[name] || "";
-  if (name === "pro") renderPro();
 }
 
 $$(".nav-btn").forEach((btn) => btn.addEventListener("click", () => switchView(btn.dataset.view)));
@@ -116,12 +129,9 @@ $$(".nav-btn").forEach((btn) => btn.addEventListener("click", () => switchView(b
 async function loadReference() {
   state.specialties = await api("/api/specialties");
   state.cities = await api("/api/cities");
-  const proData = await api("/api/pro-plans");
-  state.proPlans = proData.plans;
   renderChips();
   renderCitySelects();
   renderRegSpecialties();
-  renderProBenefits(proData.benefits);
 }
 
 function renderChips() {
@@ -195,12 +205,11 @@ function masterCardHtml(m) {
   const isFav = state.favorites.has(m.id);
   const rating = m.avg_rating ? m.avg_rating.toFixed(1) : "—";
   return `
-  <div class="master-card ${m.is_pro ? "is-pro" : ""}" data-id="${m.id}">
+  <div class="master-card" data-id="${m.id}">
     <img class="master-photo" src="${m.photo_path}" alt="${m.full_name}">
     <div class="master-main">
       <div class="master-top-row">
         <span class="master-name">${escapeHtml(m.full_name)}</span>
-        ${m.is_pro ? `<span class="pro-badge">PRO</span>` : ""}
         <span class="master-code">${m.master_code}</span>
       </div>
       <div class="master-specialty">${sp.emoji} ${sp.name} · ${m.city}</div>
@@ -248,7 +257,6 @@ function openMasterModal(id) {
     <img class="md-photo" src="${m.photo_path}" alt="${m.full_name}">
     <div class="md-header">
       <span class="md-name">${escapeHtml(m.full_name)}</span>
-      ${m.is_pro ? `<span class="pro-badge">PRO</span>` : ""}
       <span class="master-code">${m.master_code}</span>
     </div>
     <div class="master-specialty">${sp.emoji} ${sp.name} · ${m.city}</div>
@@ -382,7 +390,7 @@ function renderAiBubble(role, text, imgUrl) {
 }
 
 if (!state.aiHistory.length) {
-  renderAiBubble("assistant", "Assalomu alaykum! Men USTAK AI Yordamchiman 🤖\n\nMuammoingizni yozing (masalan: \"kranim tomchilayapti\") yoki rasm yuboring — sizga qaysi usta kerakligini aytib beraman.");
+  renderAiBubble("assistant", "Salom! 👋 Nima muammo? Yozing yoki rasm yuboring.");
 }
 
 $("#aiAttachBtn").addEventListener("click", () => $("#aiImageInput").click());
@@ -438,37 +446,6 @@ async function sendAiMessage() {
 }
 $("#aiSendBtn").addEventListener("click", sendAiMessage);
 $("#aiTextInput").addEventListener("keydown", (e) => { if (e.key === "Enter") sendAiMessage(); });
-
-// --------------------------------------------------------------- pro ----
-
-function renderProBenefits(benefits) {
-  $("#proBenefits").innerHTML = benefits.map((b) => `<li>${escapeHtml(b)}</li>`).join("");
-}
-
-function renderPro() {
-  $("#proPlans").innerHTML = state.proPlans.map((p, i) => `
-    <div class="pro-plan ${i === 1 ? "popular" : ""}" data-code="${p.code}">
-      <div>
-        <div class="pro-plan-name">${p.name}${i === 1 ? " · 🔥 Mashhur" : ""}</div>
-      </div>
-      <div class="pro-plan-price">${p.price_uzs.toLocaleString("ru-RU")} so'm</div>
-    </div>
-  `).join("");
-  $$(".pro-plan", $("#proPlans")).forEach((el) => el.addEventListener("click", () => requestPro(el.dataset.code)));
-}
-
-async function requestPro(planCode) {
-  if (!TG_ID) { toast("Botdan kirib, /start bosing"); return; }
-  const myMasters = await api(`/api/my-masters/${TG_ID}`).catch(() => []);
-  if (!myMasters.length) { toast("Avval Profil → Usta bo'lish orqali ro'yxatdan o'ting"); return; }
-  try {
-    await api("/api/pro/request", {
-      method: "POST",
-      body: JSON.stringify({ master_id: myMasters[0].id, plan_code: planCode, telegram_id: TG_ID }),
-    });
-    toast("So'rov yuborildi! Operator tez orada bog'lanadi 📨");
-  } catch (e) { toast(e.message); }
-}
 
 // ------------------------------------------------------------- profile ----
 

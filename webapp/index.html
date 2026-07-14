@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>USTAK — ustangizni toping</title>
+<title>UstaKerak — tezkor usta chaqiruv</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Sora:wght@500;600;700;800&family=Manrope:wght@400;500;600;700;800&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
@@ -16,10 +16,13 @@
   <!-- ===== TOP BAR ===== -->
   <header class="topbar">
     <div class="brand">
-      <span class="brand-mark">⚙️</span>
+      <span class="brand-mark" id="brandMark">
+        <img src="/logo.png" alt="UstaKerak" id="brandLogoImg" onerror="this.remove(); document.getElementById('brandMarkFallback').classList.remove('hidden');">
+        <span id="brandMarkFallback" class="hidden">⚙️</span>
+      </span>
       <div class="brand-text">
-        <span class="brand-name">USTAK</span>
-        <span class="brand-sub" id="brandSub">ustangizni toping</span>
+        <span class="brand-name">UstaKerak</span>
+        <span class="brand-sub" id="brandSub">tezkor usta chaqiruv</span>
       </div>
     </div>
     <button class="icon-btn" id="favToggleBtn" title="Saqlanganlar">🤍</button>
@@ -49,7 +52,7 @@
       <div class="ai-avatar">🤖</div>
       <div>
         <div class="ai-title">AI Yordamchi</div>
-        <div class="ai-sub">Muammoni yozing yoki rasm yuboring — qaysi usta kerakligini aytib beraman</div>
+        <div class="ai-sub">Savol bering yoki rasm yuboring</div>
       </div>
     </div>
     <div class="ai-chat" id="aiChat"></div>
@@ -65,22 +68,13 @@
     </div>
   </section>
 
-  <!-- ===== VIEW: PRO OBUNA ===== -->
-  <section class="view hidden" id="view-pro">
-    <div class="pro-hero">
-      <div class="pro-hero-badge">PRO</div>
-      <h2>Ustalar uchun ustunlik</h2>
-      <p>Qidiruvda birinchilar qatorida chiqing, ko'proq mijoz toping</p>
-    </div>
-    <ul class="pro-benefits" id="proBenefits"></ul>
-    <div class="pro-plans" id="proPlans"></div>
-    <p class="pro-note">Sizda hali faol e'lon yo'q bo'lsa, avval "Profil → Usta bo'lish" orqali ro'yxatdan o'ting.</p>
-  </section>
-
   <!-- ===== VIEW: PROFIL ===== -->
   <section class="view hidden" id="view-profile">
     <div class="profile-card">
-      <div class="profile-avatar" id="profileAvatar">👤</div>
+      <span class="profile-avatar" id="profileAvatar">
+        <img id="profileAvatarImg" alt="" class="hidden">
+        <span id="profileAvatarFallback">👤</span>
+      </span>
       <div>
         <div class="profile-name" id="profileName">Foydalanuvchi</div>
         <div class="profile-phone" id="profilePhone"></div>
@@ -139,9 +133,6 @@
     </button>
     <button class="nav-btn" data-view="ai">
       <span class="nav-icon">🤖</span><span>AI Yordamchi</span>
-    </button>
-    <button class="nav-btn" data-view="pro">
-      <span class="nav-icon">⭐</span><span>Pro obuna</span>
     </button>
     <button class="nav-btn" data-view="profile">
       <span class="nav-icon">👤</span><span>Profil</span>
