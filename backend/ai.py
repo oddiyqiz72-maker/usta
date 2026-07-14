@@ -1,22 +1,23 @@
 # backend/ai.py
 """
 UstaKerak AI Yordamchi.
-Anthropic API (Claude) orqali ishlaydigan yordamchi:
+Google Gemini API orqali ishlaydigan yordamchi:
   - Bot va ilova haqida savollarga javob beradi
   - Foydalanuvchi tasvirlagan muammo asosida qaysi usta kerakligini tavsiya qiladi
   - Yuklangan rasm asosida (masalan, buzilgan jihoz/naycha rasmi) muammoni aniqlashga
     yordam beradi va qaysi soha ustasi kerakligini aytadi
-Muhim: ANTHROPIC_API_KEY muhit o'zgaruvchisi sozlanishi shart. Bo'lmasa, yordamchi
-tushunarli xato xabari bilan javob beradi (bot yiqilib qolmaydi).
+Muhim: GEMINI_API_KEY muhit o'zgaruvchisi sozlanishi shart (https://aistudio.google.com/apikey
+orqali bepul olinadi). Bo'lmasa, yordamchi tushunarli xato xabari bilan javob beradi
+(bot yiqilib qolmaydi).
 """
 
 import os
 import httpx
 from backend.constants import SPECIALTIES
 
-ANTHROPIC_API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
-ANTHROPIC_URL = "https://api.anthropic.com/v1/messages"
-MODEL = "claude-sonnet-4-6"
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY", "")
+GEMINI_MODEL = os.environ.get("GEMINI_MODEL", "gemini-2.0-flash")
+GEMINI_URL = f"https://generativelanguage.googleapis.com/v1beta/models/{GEMINI_MODEL}:generateContent"
 
 SYSTEM_PROMPT = f"""Sen "UstaKerak" Telegram Mini App ilovasining AI Yordamchisisan.
 UstaKerak — O'zbekistonda mahalliy ustalarni (santexnik, elektrik, payvandchi va h.k.) topish
@@ -40,48 +41,55 @@ va ular bilan bog'lanish uchun xizmat. Sening vazifalaring:
 """
 
 
+def _to_gemini_role(role: str) -> str:
+    # Gemini "user" / "model" rollarini kutadi (bizda "user" / "assistant")
+    return "model" if role == "assistant" else "user"
+
+
 async def ask_ai(messages: list, image_base64: str = None, image_media_type: str = None) -> str:
     """
     messages: [{"role": "user"|"assistant", "content": "..."}]  (oxirgi xabar foydalanuvchidan)
     image_base64: ixtiyoriy, oxirgi foydalanuvchi xabariga rasm biriktirilsa
     """
-    if not ANTHROPIC_API_KEY:
-        return ("AI Yordamchi hozircha sozlanmagan. Administrator ANTHROPIC_API_KEY "
-                "muhit o'zgaruvchisini qo'shishi kerak.")
+    if not GEMINI_API_KEY:
+        return ("AI Yordamchi hozircha sozlanmagan. Administrator GEMINI_API_KEY "
+                "muhit o'zgaruvchisini qo'shishi kerak (https://aistudio.google.com/apikey).")
 
-    api_messages = []
+    contents = []
     for i, m in enumerate(messages):
+        parts = [{"text": m["content"]}]
         if i == len(messages) - 1 and m["role"] == "user" and image_base64:
-            api_messages.append({
-                "role": "user",
-                "content": [
-                    {"type": "image", "source": {"type": "base64", "media_type": image_media_type or "image/jpeg", "data": image_base64}},
-                    {"type": "text", "text": m["content"]},
-                ]
+            parts.insert(0, {
+                "inline_data": {
+                    "mime_type": image_media_type or "image/jpeg",
+                    "data": image_base64,
+                }
             })
-        else:
-            api_messages.append({"role": m["role"], "content": m["content"]})
+        contents.append({"role": _to_gemini_role(m["role"]), "parts": parts})
 
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
             resp = await client.post(
-                ANTHROPIC_URL,
-                headers={
-                    "x-api-key": ANTHROPIC_API_KEY,
-                    "anthropic-version": "2023-06-01",
-                    "content-type": "application/json",
-                },
+                GEMINI_URL,
+                params={"key": GEMINI_API_KEY},
+                headers={"content-type": "application/json"},
                 json={
-                    "model": MODEL,
-                    "max_tokens": 700,
-                    "system": SYSTEM_PROMPT,
-                    "messages": api_messages,
+                    "system_instruction": {"parts": [{"text": SYSTEM_PROMPT}]},
+                    "contents": contents,
+                    "generationConfig": {"maxOutputTokens": 700},
                 },
             )
             resp.raise_for_status()
             data = resp.json()
-            parts = [b["text"] for b in data.get("content", []) if b.get("type") == "text"]
-            return "\n".join(parts).strip() or "Kechirasiz, javob shakllantira olmadim. Qaytadan urinib ko'ring."
+            candidates = data.get("candidates", [])
+            if not candidates:
+                feedback = data.get("promptFeedback", {})
+                if feedback.get("blockReason"):
+                    return "Kechirasiz, bu so'rovga javob bera olmayman. Boshqacha savol bering."
+                return "Kechirasiz, javob shakllantira olmadim. Qaytadan urinib ko'ring."
+            parts = candidates[0].get("content", {}).get("parts", [])
+            text = "\n".join(p.get("text", "") for p in parts).strip()
+            return text or "Kechirasiz, javob shakllantira olmadim. Qaytadan urinib ko'ring."
     except httpx.HTTPStatusError as e:
         return f"AI xizmatida xatolik yuz berdi ({e.response.status_code}). Birozdan so'ng qayta urinib ko'ring."
     except Exception:

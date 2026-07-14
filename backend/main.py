@@ -70,6 +70,11 @@ def _webapp_inline_button(text: str, tab: str, extra: str = ""):
 
 # ------------------------------------------------------------ reference ----
 
+@app.get("/healthz")
+def healthz():
+    return {"status": "ok"}
+
+
 @app.get("/api/specialties")
 def get_specialties():
     return SPECIALTIES

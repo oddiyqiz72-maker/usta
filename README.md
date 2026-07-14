@@ -55,15 +55,25 @@ ustakerak-bot/
    - `WEBAPP_URL` — Render bergan manzil (masalan `https://ustak.onrender.com`)
    - `ADMIN_IDS`
    - `SUPPORT_USERNAME`
-   - `ANTHROPIC_API_KEY` — AI Yordamchi ishlashi uchun
+   - `GEMINI_API_KEY` — AI Yordamchi ishlashi uchun (bepul: https://aistudio.google.com/apikey)
 6. Deploy tugagach, @BotFather'da botingizga Menu Button sifatida
    `WEBAPP_URL`ni ulang (`/setmenubutton`).
+
+## 24/7 ishlashi uchun
+
+Render'ning **bepul (Free) tarifi** 15 daqiqa harakatsizlikdan so'ng xizmatni "uxlatib qo'yadi" — shu sababli bot vaqti-vaqti bilan javob bermay qolishi mumkin. To'liq 24/7 ishlashi uchun:
+
+1. **Render'da pullik tarifga o'ting** (eng ishonchli yo'l): Dashboard → sizning servis → **Settings → Instance Type** → **Starter** ($7/oy atrofida). Bu tarifda xizmat hech qachon uxlab qolmaydi.
+2. **Persistent Disk qo'shing** — bepul tarifda fayl tizimi qayta ishga tushganda tozalanadi, ya'ni `ustalar.db` va yuklangan rasmlar yo'qolib qolishi mumkin. Dashboard → **Disks** → yangi disk yarating va uni `/opt/render/project/src/backend` (yoki loyihangiz manziliga mos) ga ulang.
+3. **Health check** — Render Dashboard → **Settings → Health Check Path** ga `/healthz` deb yozing. Shunda Render xizmat "tirikligini" avtomatik tekshirib turadi va muammo bo'lsa qayta ishga tushiradi.
+4. **(Bepul tarifda qolsangiz)** tashqi "uptime" xizmati orqali har 5-10 daqiqada `https://sizning-manzil.onrender.com/healthz` manziliga so'rov yuboring — masalan [UptimeRobot](https://uptimerobot.com) yoki [cron-job.org](https://cron-job.org) bepul. Bu xizmatni "uyg'oq" tutishga yordam beradi, lekin **100% kafolat bermaydi** — chinakam 24/7 uchun pullik tarif tavsiya etiladi.
+5. Kodning o'zi endi **chidamli**: agar bot tomonida vaqtinchalik tarmoq xatosi yuz bersa, `run.py` uni avtomatik qayta ishga tushiradi va bu paytda ilova/API server ishlashda davom etadi (foydalanuvchilar webapp'dan foydalanishni to'xtatmaydi).
 
 ## Muhim eslatmalar
 
 - Bot faqat **bitta joyda** ishlashi kerak (polling), aks holda
   `TelegramConflictError` chiqadi.
-- `ANTHROPIC_API_KEY` bo'lmasa, AI Yordamchi tushunarli xato xabarini qaytaradi,
+- `GEMINI_API_KEY` bo'lmasa, AI Yordamchi tushunarli xato xabarini qaytaradi,
   lekin bot/ilova ishlashda davom etadi.
 - SQLite fayli (`backend/ustalar.db`) Render'ning **disk qayta ishga tushganda
   tozalanadigan** fayl tizimida saqlanadi — doimiy ma'lumot uchun Render Disk
